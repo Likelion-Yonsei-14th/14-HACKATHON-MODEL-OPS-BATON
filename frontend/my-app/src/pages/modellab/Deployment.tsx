@@ -48,7 +48,7 @@ export function Deployment() {
 
   return (
     <div>
-      <PageHeader description="Production is exactly one config per task type. Promote is compared side-by-side against the current production before you confirm." title="Deployment" />
+      <PageHeader description="Production은 작업 유형당 정확히 하나의 config입니다. Promote 전에 현재 Production과 나란히 비교해서 보여줍니다." title="Deployment" />
       <div className="p-6">
         <div className="mb-4 flex gap-1">
           {(['REPLY_CLASSIFICATION', 'BRANCH_GENERATION'] as ModelLabTaskType[]).map((t) => (
@@ -59,7 +59,7 @@ export function Deployment() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <MlPanel title="Current production">
+          <MlPanel title="현재 Production">
             {production ? (
               <div className="text-[12px]">
                 <div className="font-medium text-white">{production.name}</div>
@@ -67,17 +67,17 @@ export function Deployment() {
                   {production.baseModel} · threshold {production.confidenceThreshold ?? '—'} · temp {production.temperature}
                 </div>
                 <MlButton className="mt-3" disabled={!history.some((h) => h.action === 'PROMOTE')} onClick={() => setConfirming('rollback')} variant="danger">
-                  Rollback
+                  롤백
                 </MlButton>
               </div>
             ) : (
-              <EmptyState>No production config for this task yet.</EmptyState>
+              <EmptyState>아직 이 작업에 대한 Production Config가 없습니다.</EmptyState>
             )}
           </MlPanel>
 
-          <MlPanel title="Promote a candidate">
+          <MlPanel title="후보 승격">
             <MlSelect onChange={(e) => setCandidateId(e.target.value)} value={candidateId}>
-              <option value="">Select a config…</option>
+              <option value="">Config 선택…</option>
               {candidates.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.status})
@@ -85,15 +85,15 @@ export function Deployment() {
               ))}
             </MlSelect>
             <MlButton className="mt-3" disabled={!candidateId} onClick={() => setConfirming('promote')} variant="primary">
-              Promote to Production
+              Production으로 승격
             </MlButton>
             {error && <p className="mt-2 text-[11px] text-[#f87171]">{error}</p>}
           </MlPanel>
         </div>
 
-        <MlPanel className="mt-4" title="Deployment history">
+        <MlPanel className="mt-4" title="Deployment 이력">
           {history.length === 0 ? (
-            <EmptyState>No deployments yet.</EmptyState>
+            <EmptyState>아직 Deployment 이력이 없습니다.</EmptyState>
           ) : (
             <ul className="space-y-1.5 text-[12px]">
               {history.map((h) => (
@@ -112,36 +112,36 @@ export function Deployment() {
 
       {confirming === 'promote' && candidate && (
         <ConfirmDialog
-          confirmLabel="Promote"
+          confirmLabel="승격"
           description={
             <div>
               <p>
-                Promote <strong className="text-white">{candidate.name}</strong> to production for {taskType}.
+                <strong className="text-white">{candidate.name}</strong>을(를) {taskType}의 production으로 승격합니다.
               </p>
               {production && (
                 <p className="mt-2">
-                  Current production <strong className="text-white">{production.name}</strong> will be archived, not deleted — you can roll back to it later.
+                  현재 production인 <strong className="text-white">{production.name}</strong>은(는) 삭제되지 않고 archive 처리됩니다 — 나중에 다시 롤백할 수 있습니다.
                 </p>
               )}
             </div>
           }
           onCancel={() => setConfirming(null)}
           onConfirm={doPromote}
-          title="Confirm promotion"
+          title="승격 확인"
         />
       )}
       {confirming === 'rollback' && production && (
         <ConfirmDialog
-          confirmLabel="Rollback"
+          confirmLabel="롤백"
           danger
           description={
             <p>
-              Roll back <strong className="text-white">{production.name}</strong> to the previous production config for {taskType}.
+              {taskType}의 <strong className="text-white">{production.name}</strong>을(를) 이전 production config로 롤백합니다.
             </p>
           }
           onCancel={() => setConfirming(null)}
           onConfirm={doRollback}
-          title="Confirm rollback"
+          title="롤백 확인"
         />
       )}
     </div>

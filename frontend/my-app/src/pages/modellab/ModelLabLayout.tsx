@@ -6,22 +6,22 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 // no glow, no hero. It does not reuse AppShell/Header's Figma-derived branding on purpose.
 
 const navGroups: { label: string; items: { label: string; to: string }[] }[] = [
-  { label: '', items: [{ label: 'Overview', to: '/batons/models' }] },
+  { label: '', items: [{ label: '개요', to: '/batons/models' }] },
   {
-    label: 'Models',
+    label: '모델',
     items: [
-      { label: 'Classification', to: '/batons/models/classification' },
-      { label: 'Generation', to: '/batons/models/generation' },
+      { label: '분류', to: '/batons/models/classification' },
+      { label: '생성', to: '/batons/models/generation' },
     ],
   },
   {
     label: '',
     items: [
-      { label: 'Prompts', to: '/batons/models/prompts' },
-      { label: 'Datasets', to: '/batons/models/datasets' },
-      { label: 'Eval Runs', to: '/batons/models/eval-runs' },
-      { label: 'Fine-tuning', to: '/batons/models/fine-tuning' },
-      { label: 'Deployment', to: '/batons/models/deployment' },
+      { label: '프롬프트', to: '/batons/models/prompts' },
+      { label: '데이터셋', to: '/batons/models/datasets' },
+      { label: '평가 실행', to: '/batons/models/eval-runs' },
+      { label: '파인튜닝', to: '/batons/models/fine-tuning' },
+      { label: '배포', to: '/batons/models/deployment' },
     ],
   },
 ]
@@ -59,10 +59,10 @@ export function ModelLabLayout() {
           ))}
         </nav>
         <div className="border-t border-[#1f2328] px-4 py-3 text-[11px] text-[#5b6270]">
-          Internal tool · admin only
+          내부 도구 · 관리자 전용
           <br />
           <Link className="text-[#5b8def] hover:underline" to="/home">
-            ← Back to Baton
+            ← Baton으로 돌아가기
           </Link>
         </div>
       </aside>

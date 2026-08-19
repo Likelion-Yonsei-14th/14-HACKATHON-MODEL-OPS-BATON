@@ -55,7 +55,7 @@ export function GenerationWorkspace() {
 
   return (
     <div>
-      <PageHeader description="Human-review-first Generation eval (spec section 4.3): hard rules run automatically, quality is scored by a person, never by an LLM judge." title="Generation" />
+      <PageHeader description="Human-review-first Generation eval (spec section 4.3): hard rule은 자동으로 실행되고, 품질 평가는 LLM judge가 아닌 사람이 직접 점수를 매깁니다." title="Generation" />
       <div className="space-y-6 p-6">
         <div className="grid grid-cols-3 gap-4">
           <MlPanel title="Config">
@@ -67,7 +67,7 @@ export function GenerationWorkspace() {
               ))}
             </MlSelect>
           </MlPanel>
-          <MlPanel title="Dataset & split">
+          <MlPanel title="Dataset & Split">
             <MlSelect onChange={(e) => setDatasetId(e.target.value)} value={datasetId}>
               {datasets.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -85,24 +85,24 @@ export function GenerationWorkspace() {
           </MlPanel>
           <MlPanel title="Run">
             <MlButton disabled={running || !configId || !datasetId} onClick={runEval} variant="primary">
-              {running ? 'Running…' : `Generate for ${split}`}
+              {running ? '실행 중…' : `${split} 생성`}
             </MlButton>
             {error && <p className="mt-2 text-[11px] text-[#f87171]">{error}</p>}
           </MlPanel>
         </div>
 
         {metrics && (
-          <MlPanel title="Hard-rule check (automatic; not a quality score)">
+          <MlPanel title="Hard-rule Check (자동 검사, 품질 점수 아님)">
             <div className="grid grid-cols-2 gap-3">
               <MetricTile label="Scenarios" value={String(metrics.total_scenarios)} />
-              <MetricTile label="Hard-rule pass rate" tone={metrics.hard_rule_pass_rate < 1 ? 'warn' : 'good'} value={formatPercent(metrics.hard_rule_pass_rate)} />
+              <MetricTile label="Hard-rule Pass Rate" tone={metrics.hard_rule_pass_rate < 1 ? 'warn' : 'good'} value={formatPercent(metrics.hard_rule_pass_rate)} />
             </div>
           </MlPanel>
         )}
 
-        <MlPanel title={`Generated branches (${results.length})`}>
+        <MlPanel title={`생성된 Branch (${results.length})`}>
           {results.length === 0 ? (
-            <EmptyState>Run Generation to see output here.</EmptyState>
+            <EmptyState>Generation을 실행하면 결과가 여기 표시됩니다.</EmptyState>
           ) : (
             <div className="space-y-4">
               {results.map((r) => (
@@ -140,11 +140,11 @@ function GenerationResultRow({ result }: { result: EvalResult }) {
     <div className="grid grid-cols-2 gap-4 rounded-[3px] border border-[#1f2328] p-3">
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <MlBadge tone={result.passed ? 'good' : 'bad'}>{result.passed ? 'hard rules OK' : 'hard rule failed'}</MlBadge>
+          <MlBadge tone={result.passed ? 'good' : 'bad'}>{result.passed ? 'Hard Rule 통과' : 'Hard Rule 실패'}</MlBadge>
           {result.errorMessage && <span className="text-[11px] text-[#f87171]">{result.errorMessage}</span>}
         </div>
         {branches.length === 0 ? (
-          <p className="text-[11px] text-[#5b6270]">No branches parsed.</p>
+          <p className="text-[11px] text-[#5b6270]">파싱된 branch가 없습니다.</p>
         ) : (
           <div className="space-y-2">
             {branches.map((b, i) => (
@@ -159,7 +159,7 @@ function GenerationResultRow({ result }: { result: EvalResult }) {
         )}
       </div>
       <div>
-        <div className="mb-1 text-[10px] uppercase text-[#5b6270]">Human review</div>
+        <div className="mb-1 text-[10px] uppercase text-[#5b6270]">Human Review</div>
         <div className="grid grid-cols-4 gap-1.5">
           {SCORE_FIELDS.map(([key, label]) => (
             <label className="text-[10px] text-[#8b93a1]" key={key}>
@@ -178,12 +178,12 @@ function GenerationResultRow({ result }: { result: EvalResult }) {
         <textarea
           className="mt-2 w-full rounded-[3px] border border-[#2a2f37] bg-[#0b0d10] px-2 py-1 text-[11px] text-[#d4d8dd]"
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Reviewer note"
+          placeholder="리뷰어 메모"
           rows={2}
           value={note}
         />
         <MlButton className="mt-2" onClick={save}>
-          {saved ? 'Saved ✓' : 'Save review'}
+          {saved ? '저장됨 ✓' : '리뷰 저장'}
         </MlButton>
       </div>
     </div>

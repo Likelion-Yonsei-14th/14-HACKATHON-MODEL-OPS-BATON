@@ -20,11 +20,11 @@ export function EvalRunsList() {
 
   return (
     <div>
-      <PageHeader description="All Classification eval runs. Pick up to two rows to compare side by side." title="Eval Runs" />
+      <PageHeader description="모든 Classification Eval Run. 최대 2개 행을 선택해 나란히 비교할 수 있습니다." title="Eval Runs" />
       <div className="p-6">
         <MlPanel title={`Runs (${runs.length})`}>
           {runs.length === 0 ? (
-            <EmptyState>No eval runs yet.</EmptyState>
+            <EmptyState>아직 Eval Run이 없습니다.</EmptyState>
           ) : (
             <table className="w-full text-left text-[12px]">
               <thead>
@@ -32,10 +32,10 @@ export function EvalRunsList() {
                   <th className="py-1.5"></th>
                   <th>Run</th>
                   <th>Split</th>
-                  <th>Status</th>
+                  <th>상태</th>
                   <th>False Auto-Send</th>
                   <th>Accuracy</th>
-                  <th>Created</th>
+                  <th>생성일</th>
                 </tr>
               </thead>
               <tbody>
@@ -67,7 +67,7 @@ export function EvalRunsList() {
         </MlPanel>
 
         {compareRuns.length === 2 && (
-          <MlPanel className="mt-4" title="Compare">
+          <MlPanel className="mt-4" title="비교">
             <div className="grid grid-cols-2 gap-4">
               {compareRuns.map((r) => {
                 const m = r.aggregateMetrics as ClassificationMetrics | null
@@ -90,7 +90,7 @@ export function EvalRunsList() {
                         </tbody>
                       </table>
                     ) : (
-                      <EmptyState>No metrics.</EmptyState>
+                      <EmptyState>메트릭이 없습니다.</EmptyState>
                     )}
                   </div>
                 )
@@ -127,21 +127,21 @@ export function EvalRunDetail() {
     getResults(id).then(setResults)
   }, [id, isGeneration])
 
-  if (!run) return <EmptyState>Loading…</EmptyState>
+  if (!run) return <EmptyState>불러오는 중…</EmptyState>
 
   return (
     <div>
       <PageHeader description={`${run.taskType} · dataset #${run.datasetId} · split ${run.split}`} title={`Run #${run.id}`} />
       <div className="space-y-4 p-6">
-        <MlPanel title="Snapshot (config/prompt used at run time — never changes even if the config is later edited)">
+        <MlPanel title="Snapshot (실행 시점의 config/prompt — 이후 config가 수정되어도 절대 바뀌지 않음)">
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[3px] bg-[#0b0d10] p-2 font-mono text-[11px] text-[#c4c9d1]">{JSON.stringify(run.modelSnapshot, null, 2)}</pre>
         </MlPanel>
-        <MlPanel title="Aggregate metrics">
+        <MlPanel title="종합 메트릭">
           <pre className="whitespace-pre-wrap font-mono text-[11px] text-[#c4c9d1]">{JSON.stringify(run.aggregateMetrics, null, 2)}</pre>
         </MlPanel>
         <MlPanel title={`Results (${results.length})`}>
           {results.length === 0 ? (
-            <EmptyState>No results.</EmptyState>
+            <EmptyState>결과가 없습니다.</EmptyState>
           ) : (
             <ul className="space-y-1 text-[11px] text-[#8b93a1]">
               {results.map((r) => (

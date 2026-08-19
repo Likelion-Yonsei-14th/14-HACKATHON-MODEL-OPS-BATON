@@ -40,7 +40,7 @@ export function Datasets() {
 
   return (
     <div>
-      <PageHeader description="Scenario/reply-case fixtures. Split (SMOKE/CORE/HOLDOUT) controls which eval runs use a given case (spec section 12)." title="Datasets" />
+      <PageHeader description="Scenario/reply-case 픽스처. Split(SMOKE/CORE/HOLDOUT)이 어떤 Eval Run이 해당 case를 사용할지 결정합니다 (spec section 12)." title="Datasets" />
       <div className="grid grid-cols-[220px_260px_1fr] gap-0 divide-x divide-[#1f2328] border-t border-[#1f2328]">
         <div className="p-4">
           <div className="mb-3 flex gap-1">
@@ -69,16 +69,16 @@ export function Datasets() {
             ))}
           </ul>
           <div className="mt-4 flex gap-1">
-            <MlInput onChange={(e) => setNewDatasetName(e.target.value)} placeholder="New dataset name" value={newDatasetName} />
+            <MlInput onChange={(e) => setNewDatasetName(e.target.value)} placeholder="새 Dataset 이름" value={newDatasetName} />
             <MlButton onClick={createDataset}>+</MlButton>
           </div>
         </div>
 
         <div className="p-4">
           {!datasetId ? (
-            <EmptyState>Select a dataset.</EmptyState>
+            <EmptyState>Dataset을 선택하세요.</EmptyState>
           ) : scenarios.length === 0 ? (
-            <EmptyState>No scenarios yet.</EmptyState>
+            <EmptyState>아직 Scenario가 없습니다.</EmptyState>
           ) : (
             <ul className="space-y-1">
               {scenarios.map((s) => (
@@ -102,7 +102,7 @@ export function Datasets() {
 
         <div className="p-4">
           {!selectedScenario ? (
-            <EmptyState>Select a scenario to view its question, golden branches, and reply cases.</EmptyState>
+            <EmptyState>Scenario를 선택하면 질문, Golden Branch, Reply Case를 볼 수 있습니다.</EmptyState>
           ) : (
             <ScenarioDetail replyCases={replyCases} scenario={selectedScenario} />
           )}
@@ -124,7 +124,7 @@ function ScenarioDetail({ scenario, replyCases }: { scenario: EvalScenario; repl
       </div>
 
       {scenario.goldenBranches && scenario.goldenBranches.length > 0 && (
-        <MlPanel title={`Golden branches (${scenario.goldenBranches.length})`}>
+        <MlPanel title={`Golden Branch (${scenario.goldenBranches.length})`}>
           <div className="space-y-2">
             {scenario.goldenBranches.map((b, i) => (
               <div className="rounded-[3px] border border-[#1f2328] p-2 text-[11px]" key={i}>
@@ -140,9 +140,9 @@ function ScenarioDetail({ scenario, replyCases }: { scenario: EvalScenario; repl
         </MlPanel>
       )}
 
-      <MlPanel title={`Reply cases (${replyCases.length})`}>
+      <MlPanel title={`Reply Case (${replyCases.length})`}>
         {replyCases.length === 0 ? (
-          <EmptyState>No reply cases for this scenario.</EmptyState>
+          <EmptyState>이 Scenario에는 Reply Case가 없습니다.</EmptyState>
         ) : (
           <div className="space-y-3">
             {replyCases.map((c) => (
@@ -156,7 +156,7 @@ function ScenarioDetail({ scenario, replyCases }: { scenario: EvalScenario; repl
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-1 text-[10px]">
-                  <MlBadge tone={c.expectedBranchKey ? 'good' : 'neutral'}>expected branch: {c.expectedBranchKey ?? 'none'}</MlBadge>
+                  <MlBadge tone={c.expectedBranchKey ? 'good' : 'neutral'}>expected branch: {c.expectedBranchKey ?? '없음'}</MlBadge>
                   {c.expectedAmbiguous && <MlBadge tone="warn">AMBIGUOUS</MlBadge>}
                   {c.expectedNewQuestion && <MlBadge tone="warn">NEW_QUESTION</MlBadge>}
                   {c.expectedOutOfScope && <MlBadge tone="warn">OUT_OF_SCOPE</MlBadge>}

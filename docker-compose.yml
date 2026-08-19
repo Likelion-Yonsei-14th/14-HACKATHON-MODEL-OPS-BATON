@@ -1,0 +1,31 @@
+services:
+  model-lab-backend:
+    build:
+      context: ./backend
+      dockerfile: ../backend.Dockerfile
+    container_name: baton-model-lab-backend
+    restart: unless-stopped
+    env_file:
+      - /opt/baton/.env
+    environment:
+      BATON_DB_URL: jdbc:postgresql://baton-postgres:5432/${BATON_POSTGRES_DB:-baton}
+      OLLAMA_BASE_URL: http://baton-ollama:11434/v1
+      APP_CORS_ALLOWED_ORIGINS: "*"
+
+  model-lab-frontend:
+    build:
+      context: ./frontend/my-app
+      dockerfile: ../../frontend.Dockerfile
+      args:
+        VITE_BATON_API_BASE_URL: http://1.201.116.120:8090
+    container_name: baton-model-lab-frontend
+    restart: unless-stopped
+    depends_on:
+      - model-lab-backend
+    ports:
+      - "8090:80"
+
+networks:
+  default:
+    name: baton_default
+    external: true

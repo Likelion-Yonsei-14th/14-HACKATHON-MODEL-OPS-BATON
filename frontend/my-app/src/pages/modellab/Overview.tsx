@@ -16,9 +16,9 @@ export function Overview() {
 
   return (
     <div>
-      <PageHeader description="Production configs, recent activity, and headline Classification quality metrics." title="Overview" />
+      <PageHeader description="현재 Production 설정, 최근 활동, Classification 품질 지표 요약." title="Overview" />
       <div className="space-y-6 p-6">
-        {error && <EmptyState>Failed to load overview: {error}</EmptyState>}
+        {error && <EmptyState>Overview를 불러오지 못했습니다: {error}</EmptyState>}
 
         <div className="grid grid-cols-2 gap-4">
           <MlPanel title="Production · Classification">
@@ -30,7 +30,7 @@ export function Overview() {
                 </div>
               </div>
             ) : (
-              <EmptyState>No production config yet. Promote one from Deployment.</EmptyState>
+              <EmptyState>아직 Production Config가 없습니다. Deployment에서 승격하세요.</EmptyState>
             )}
           </MlPanel>
           <MlPanel title="Production · Generation">
@@ -40,12 +40,12 @@ export function Overview() {
                 <div className="mt-1 text-[12px] text-[#8b93a1]">{data.productionGenerationConfig.baseModel}</div>
               </div>
             ) : (
-              <EmptyState>No production config yet. Promote one from Deployment.</EmptyState>
+              <EmptyState>아직 Production Config가 없습니다. Deployment에서 승격하세요.</EmptyState>
             )}
           </MlPanel>
         </div>
 
-        <MlPanel title="Classification quality (most recent completed run)">
+        <MlPanel title="Classification 품질 (가장 최근 완료된 Run)">
           {clsMetrics ? (
             <div className="grid grid-cols-5 gap-3">
               <MetricTile label="False Auto-Send" tone={clsMetrics.false_auto_send_rate > 0 ? 'bad' : 'good'} value={formatPercent(clsMetrics.false_auto_send_rate)} />
@@ -55,12 +55,12 @@ export function Overview() {
               <MetricTile label="New Question Recall" value={formatPercent(clsMetrics.new_question_detection_recall)} />
             </div>
           ) : (
-            <EmptyState>No completed Classification eval runs yet.</EmptyState>
+            <EmptyState>완료된 Classification Eval Run이 아직 없습니다.</EmptyState>
           )}
         </MlPanel>
 
         <div className="grid grid-cols-3 gap-4">
-          <MlPanel title="Recent Eval Runs">
+          <MlPanel title="최근 Eval Run">
             {data?.recentEvalRuns.length ? (
               <ul className="space-y-2">
                 {data.recentEvalRuns.slice(0, 6).map((r) => (
@@ -73,10 +73,10 @@ export function Overview() {
                 ))}
               </ul>
             ) : (
-              <EmptyState>No eval runs yet.</EmptyState>
+              <EmptyState>아직 Eval Run이 없습니다.</EmptyState>
             )}
           </MlPanel>
-          <MlPanel title="Recent Fine-tuning Jobs">
+          <MlPanel title="최근 Fine-tuning Job">
             {data?.recentFineTuningJobs.length ? (
               <ul className="space-y-2">
                 {data.recentFineTuningJobs.map((j) => (
@@ -89,10 +89,10 @@ export function Overview() {
                 ))}
               </ul>
             ) : (
-              <EmptyState>No fine-tuning jobs yet.</EmptyState>
+              <EmptyState>아직 Fine-tuning Job이 없습니다.</EmptyState>
             )}
           </MlPanel>
-          <MlPanel title="Recent Deployments">
+          <MlPanel title="최근 Deployment">
             {data?.recentDeployments.length ? (
               <ul className="space-y-2">
                 {data.recentDeployments.map((d) => (
@@ -105,7 +105,7 @@ export function Overview() {
                 ))}
               </ul>
             ) : (
-              <EmptyState>No deployments yet.</EmptyState>
+              <EmptyState>아직 Deployment 이력이 없습니다.</EmptyState>
             )}
           </MlPanel>
         </div>

@@ -64,10 +64,10 @@ export function ClassificationWorkspace() {
       <PageHeader
         action={
           <div className="flex gap-2">
-            <MlButton onClick={() => setShowNewConfig((s) => !s)}>{showNewConfig ? 'Cancel' : '+ New config'}</MlButton>
+            <MlButton onClick={() => setShowNewConfig((s) => !s)}>{showNewConfig ? '취소' : '+ 새 Config'}</MlButton>
           </div>
         }
-        description="Config-driven Classification eval loop: prompt/model/threshold editor, Eval Runner, metrics, and Failed Cases."
+        description="Config 기반 Classification eval 루프: prompt/model/threshold 편집기, Eval Runner, 메트릭, Failed Cases."
         title="Classification"
       />
 
@@ -98,14 +98,14 @@ export function ClassificationWorkspace() {
                   Status: <MlBadge tone={statusTone(selectedConfig.status)}>{selectedConfig.status}</MlBadge>
                 </div>
                 <div>Model: {selectedConfig.baseModel}</div>
-                <div>Prompt version id: {selectedConfig.promptVersionId}</div>
+                <div>Prompt Version ID: {selectedConfig.promptVersionId}</div>
                 <div>Temperature: {selectedConfig.temperature}</div>
                 <div>Threshold: {selectedConfig.confidenceThreshold ?? '—'}</div>
               </div>
             )}
           </MlPanel>
 
-          <MlPanel title="Dataset & split">
+          <MlPanel title="Dataset & Split">
             <MlSelect onChange={(e) => setDatasetId(e.target.value)} value={datasetId}>
               {datasets.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -130,21 +130,21 @@ export function ClassificationWorkspace() {
           <MlPanel title="Run">
             {/* Cost control: expected case count shown before executing (spec section 37). */}
             <p className="text-[12px] text-[#8b93a1]">
-              This run will call OpenAI <span className="font-semibold text-white">{previewCount ?? '—'}</span> time(s).
+              이 Run은 OpenAI를 <span className="font-semibold text-white">{previewCount ?? '—'}</span>회 호출합니다.
             </p>
             <MlButton className="mt-3" disabled={running || !previewCount} onClick={runEval} variant="primary">
-              {running ? 'Running…' : `Run ${split}`}
+              {running ? '실행 중…' : `${split} 실행`}
             </MlButton>
             {error && <p className="mt-2 text-[11px] text-[#f87171]">{error}</p>}
           </MlPanel>
         </div>
 
-        <MlPanel title="Latest run metrics">
+        <MlPanel title="최근 Run 메트릭">
           {!metrics ? (
-            <EmptyState>Run an eval to see metrics here.</EmptyState>
+            <EmptyState>Eval을 실행하면 메트릭이 여기 표시됩니다.</EmptyState>
           ) : (
             <div className="grid grid-cols-6 gap-3">
-              <MetricTile hint="conjunction, not confidence alone" label="False Auto-Send" tone={metrics.false_auto_send_rate > 0 ? 'bad' : 'good'} value={formatPercent(metrics.false_auto_send_rate)} />
+              <MetricTile hint="단독 confidence가 아닌 조건들의 결합" label="False Auto-Send" tone={metrics.false_auto_send_rate > 0 ? 'bad' : 'good'} value={formatPercent(metrics.false_auto_send_rate)} />
               <MetricTile label="Auto-Send Coverage" value={formatPercent(metrics.auto_send_coverage)} />
               <MetricTile label="Branch Accuracy" value={formatPercent(metrics.branch_match_accuracy)} />
               <MetricTile label="Ambiguous Recall" value={formatPercent(metrics.ambiguous_detection_recall)} />
@@ -160,16 +160,16 @@ export function ClassificationWorkspace() {
           )}
         </MlPanel>
 
-        <MlPanel title={`Failed cases (${failedCases.length})`}>
+        <MlPanel title={`Failed Cases (${failedCases.length})`}>
           {failedCases.length === 0 ? (
-            <EmptyState>No failed cases from the latest run (or no run yet).</EmptyState>
+            <EmptyState>최근 Run에서 실패한 case가 없습니다 (또는 아직 Run이 없습니다).</EmptyState>
           ) : (
             <table className="w-full text-left text-[12px]">
               <thead>
                 <tr className="border-b border-[#1f2328] text-[10px] uppercase text-[#5b6270]">
                   <th className="py-1.5">Case</th>
-                  <th>Auto-send exp.</th>
-                  <th>Auto-send act.</th>
+                  <th>Auto-send 기대값</th>
+                  <th>Auto-send 실제값</th>
                   <th>Latency</th>
                   <th></th>
                 </tr>
@@ -185,7 +185,7 @@ export function ClassificationWorkspace() {
                       <MlBadge tone={c.autoSendActual && !c.autoSendExpected ? 'bad' : 'neutral'}>{String(c.autoSendActual)}</MlBadge>
                     </td>
                     <td>{c.latencyMs ?? '—'} ms</td>
-                    <td className="text-[#5b8def]">View →</td>
+                    <td className="text-[#5b8def]">보기 →</td>
                   </tr>
                 ))}
               </tbody>
@@ -208,18 +208,18 @@ function NewConfigForm({ promptVersions, onCreated }: { promptVersions: PromptVe
   const [busy, setBusy] = useState(false)
 
   return (
-    <MlPanel title="New Classification config">
+    <MlPanel title="새 Classification Config">
       <div className="grid grid-cols-5 gap-3">
         <div>
-          <label className="mb-1 block text-[11px] text-[#8b93a1]">Name</label>
+          <label className="mb-1 block text-[11px] text-[#8b93a1]">이름</label>
           <MlInput onChange={(e) => setName(e.target.value)} placeholder="CLS-v2" value={name} />
         </div>
         <div>
-          <label className="mb-1 block text-[11px] text-[#8b93a1]">Base model</label>
+          <label className="mb-1 block text-[11px] text-[#8b93a1]">Base Model</label>
           <MlInput onChange={(e) => setBaseModel(e.target.value)} value={baseModel} />
         </div>
         <div>
-          <label className="mb-1 block text-[11px] text-[#8b93a1]">Prompt version</label>
+          <label className="mb-1 block text-[11px] text-[#8b93a1]">Prompt Version</label>
           <MlSelect onChange={(e) => setPromptVersionId(e.target.value)} value={promptVersionId}>
             {promptVersions.map((v) => (
               <option key={v.id} value={v.id}>
@@ -259,7 +259,7 @@ function NewConfigForm({ promptVersions, onCreated }: { promptVersions: PromptVe
         }}
         variant="primary"
       >
-        Create
+        생성
       </MlButton>
     </MlPanel>
   )
@@ -270,18 +270,18 @@ function FailedCaseDrawer({ result, onClose }: { result: EvalResult; onClose: ()
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60">
       <div className="h-full w-full max-w-lg overflow-y-auto border-l border-[#2a2f37] bg-[#0d0f12] p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-[14px] font-semibold text-white">Failed case #{result.id}</h2>
+          <h2 className="text-[14px] font-semibold text-white">Failed Case #{result.id}</h2>
           <button className="text-[#8b93a1] hover:text-white" onClick={onClose} type="button">
             ✕
           </button>
         </div>
         <div className="space-y-4 text-[12px]">
-          <Field label="Input snapshot" value={result.inputSnapshot} />
+          <Field label="Input Snapshot" value={result.inputSnapshot} />
           <Field label="Expected" value={result.expected} />
           <Field label="Actual" value={result.actual} />
           <div className="grid grid-cols-2 gap-2">
-            <MetricTile label="Auto-send expected" value={String(result.autoSendExpected)} />
-            <MetricTile label="Auto-send actual" tone={result.autoSendActual && !result.autoSendExpected ? 'bad' : 'neutral'} value={String(result.autoSendActual)} />
+            <MetricTile label="Auto-send 기대값" value={String(result.autoSendExpected)} />
+            <MetricTile label="Auto-send 실제값" tone={result.autoSendActual && !result.autoSendExpected ? 'bad' : 'neutral'} value={String(result.autoSendActual)} />
             <MetricTile label="Latency" value={`${result.latencyMs ?? '—'} ms`} />
             <MetricTile label="Tokens (in/out)" value={`${result.inputTokens ?? '—'} / ${result.outputTokens ?? '—'}`} />
           </div>

@@ -114,7 +114,7 @@ export function ConfirmDialog({ title, description, confirmLabel, danger, onConf
         <h2 className="text-[14px] font-semibold text-white">{title}</h2>
         <div className="mt-3 space-y-2 text-[12px] text-[#9aa4b2]">{description}</div>
         <div className="mt-5 flex justify-end gap-2">
-          <MlButton onClick={onCancel}>Cancel</MlButton>
+          <MlButton onClick={onCancel}>취소</MlButton>
           <MlButton onClick={onConfirm} variant={danger ? 'danger' : 'primary'}>
             {confirmLabel}
           </MlButton>

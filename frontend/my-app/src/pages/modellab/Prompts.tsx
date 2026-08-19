@@ -35,10 +35,10 @@ export function Prompts() {
 
   return (
     <div>
-      <PageHeader description="Prompt versions are append-only — creating a new one never edits an existing version (spec section 13)." title="Prompts" />
+      <PageHeader description="Prompt Version은 추가 전용(append-only)입니다 — 새 버전을 만들어도 기존 버전은 수정되지 않습니다 (spec section 13)." title="Prompts" />
       <div className="grid grid-cols-[280px_1fr] gap-4 p-6">
         <div>
-          <label className="mb-1 block text-[11px] uppercase tracking-wide text-[#5b6270]">Task type</label>
+          <label className="mb-1 block text-[11px] uppercase tracking-wide text-[#5b6270]">Task Type</label>
           <div className="flex gap-1">
             {(['REPLY_CLASSIFICATION', 'BRANCH_GENERATION'] as ModelLabTaskType[]).map((t) => (
               <button
@@ -52,27 +52,27 @@ export function Prompts() {
             ))}
           </div>
 
-          <MlPanel className="mt-4" title="New version">
+          <MlPanel className="mt-4" title="새 버전">
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-[11px] text-[#8b93a1]">System prompt</label>
+                <label className="mb-1 block text-[11px] text-[#8b93a1]">System Prompt</label>
                 <MlTextarea onChange={(e) => setSystemPrompt(e.target.value)} rows={10} value={systemPrompt} />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] text-[#8b93a1]">Notes</label>
+                <label className="mb-1 block text-[11px] text-[#8b93a1]">메모</label>
                 <MlTextarea onChange={(e) => setNotes(e.target.value)} rows={2} value={notes} />
               </div>
               <MlButton disabled={creating || !systemPrompt.trim()} onClick={create} variant="primary">
-                {creating ? 'Creating…' : 'Create version'}
+                {creating ? '생성 중…' : '버전 생성'}
               </MlButton>
               {error && <p className="text-[11px] text-[#f87171]">{error}</p>}
             </div>
           </MlPanel>
         </div>
 
-        <MlPanel title={`Versions (${versions.length})`}>
+        <MlPanel title={`버전 (${versions.length})`}>
           {versions.length === 0 ? (
-            <EmptyState>No prompt versions for this task type yet.</EmptyState>
+            <EmptyState>이 작업 유형에 대한 Prompt Version이 아직 없습니다.</EmptyState>
           ) : (
             <div className="space-y-3">
               {versions.map((v) => (
