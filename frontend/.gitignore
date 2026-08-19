@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# Next.js / build
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+
+# environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# tooling
+.turbo/
+.vercel/
+playwright-report/
+test-results/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# local agent settings
+AGENTS.local.md
+CLAUDE.local.md
+.claude/settings.local.json
+

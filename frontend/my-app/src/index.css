@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+
+/* Figma "Baton 와이어프레임 - 디자인" 파일에서 추출한 토큰. 메인 컬러: #477AD0. */
+@theme {
+  --color-primary: #477ad0;
+  --color-primary-soft: #e7edf9;
+  --color-ink: #1a1a1a;
+  --color-muted: #64748b;
+  --color-muted-2: #a1a1a1;
+  --color-border: #e2e0dc;
+  --color-border-strong: #a1a1a1;
+  --color-landing: #f6f9ff;
+
+  --font-suit: 'SUIT Variable', system-ui, 'Segoe UI', sans-serif;
+  --font-sans: 'InterVariable', system-ui, 'Segoe UI', sans-serif;
+}
+
+@font-face {
+  font-family: 'SUIT Variable';
+  src: url('https://cdn.jsdelivr.net/gh/sunn-us/SUIT@2/fonts/variable/woff2/SUIT-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'InterVariable';
+  src: url('https://rsms.me/inter/font-files/InterVariable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+}

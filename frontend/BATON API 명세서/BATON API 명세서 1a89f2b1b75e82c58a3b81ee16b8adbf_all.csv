@@ -1,0 +1,41 @@
+﻿이름,API Path,HTTP 메서드,기능 분류,완료 여부
+BATON 취소,/api/batons/{id}/cancel,POST,Batons,No
+Classification 목록 조회,/api/batons/{baton_id}/classifications,GET,Classifications,No
+AI Branch 생성,/api/batons/{baton_id}/branches/generate,POST,Branches,No
+Branch 생성,/api/batons/{baton_id}/branches,POST,Branches,No
+BATON 실행 타임라인 조회,/api/batons/{baton_id}/timeline,GET,View,No
+Branch 목록 조회,/api/batons/{baton_id}/branches,GET,Branches,No
+BATON 단일 조회,/api/batons/{id},GET,Batons,No
+BATON 생성,/api/batons,POST,Batons,No
+대화 목록 조회,/api/conversations,GET,Conversations,No
+Slack Event 수신,/api/webhooks/slack/events,POST,Webhooks,No
+홈 KPI 조회,/api/dashboard/metrics,GET,View,No
+BATON 활성화,/api/batons/{id}/activate,POST,Batons,No
+회원가입,/api/users,POST,Users,No
+구현 차이 및 PR 이력,,,Reference,No
+Slack OAuth 연결 시작,/api/platform-connections/slack/connect,GET,Platform Connections,No
+Branch 수정,/api/batons/{baton_id}/branches/{id},PATCH,Branches,No
+대화 단일 조회,/api/conversations/{id},GET,Conversations,No
+회원 탈퇴,/api/users/me,DELETE,Users,No
+메시지 발송,/api/conversations/{conversation_id}/messages,POST,Messages,No
+BATON 삭제,/api/batons/{id},DELETE,Batons,No
+Branch 단일 조회,/api/branches/{id},GET,Branches,No
+내 사용자 정보 조회,/api/users/me,GET,Users,No
+플랫폼 연결 목록 조회,/api/platform-connections,GET,Platform Connections,No
+Classification 단일 조회,/api/classifications/{id},GET,Classifications,No
+플랫폼 연결 단일 조회,/api/platform-connections/{id},GET,Platform Connections,No
+Branch 삭제,/api/batons/{baton_id}/branches/{id},DELETE,Branches,No
+플랫폼 연결 해제,/api/platform-connections/{id},DELETE,Platform Connections,No
+내 사용자 정보 수정,/api/users/me,PATCH,Users,No
+핵심 API 흐름,,,Reference,No
+BATON 수정,/api/batons/{id},PATCH,Batons,No
+대화 메시지 동기화,/api/conversations/{conversation_id}/messages/sync,POST,Messages,No
+Execution 단일 조회,/api/executions/{id},GET,Executions,No
+BATON 목록 조회,/api/batons,GET,Batons,No
+보류 BATON 수동 처리,/api/batons/{baton_id}/resolve,POST,Executions,No
+대화 메시지 목록 조회,/api/conversations/{conversation_id}/messages,GET,Messages,No
+Enum 정의,,,Reference,No
+메시지 단일 조회,/api/messages/{id},GET,Messages,No
+대화 목록 동기화,/api/platform-connections/{connection_id}/conversations/sync,POST,Platform Connections,No
+Slack OAuth Callback,/api/platform-connections/slack/callback,GET,Platform Connections,No
+Execution 목록 조회,/api/batons/{baton_id}/executions,GET,Executions,No
