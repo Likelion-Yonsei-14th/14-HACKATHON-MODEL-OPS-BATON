@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { API_KEY_STORAGE_KEY } from '../api/http/config'
 import logo from '../assets/logo.png'
@@ -7,6 +7,10 @@ import { buttonClasses } from '../lib/buttonClasses'
 
 export function Login() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  // Model Lab links here as /login?redirect=/batons/models so a successful login lands back
+  // where the user actually wanted to go, instead of always bouncing to /home.
+  const redirectTo = searchParams.get('redirect') || '/home'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -14,9 +18,9 @@ export function Login() {
 
   useEffect(() => {
     if (localStorage.getItem(API_KEY_STORAGE_KEY)) {
-      navigate('/home', { replace: true })
+      navigate(redirectTo, { replace: true })
     }
-  }, [navigate])
+  }, [navigate, redirectTo])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -25,7 +29,7 @@ export function Login() {
     try {
       const { apiKey } = await api.login({ email, password })
       localStorage.setItem(API_KEY_STORAGE_KEY, apiKey)
-      navigate('/home', { replace: true })
+      navigate(redirectTo, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : '로그인에 실패했습니다.')
     } finally {
