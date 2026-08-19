@@ -69,6 +69,7 @@ public class ModelLabAdminInterceptor implements HandlerInterceptor {
 
 	private boolean reject(HttpServletResponse response, int status, String code, String message) throws java.io.IOException {
 		response.setStatus(status);
+		response.setCharacterEncoding("UTF-8");
 		response.setContentType("application/json");
 		response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.error(code, message)));
 		return false;

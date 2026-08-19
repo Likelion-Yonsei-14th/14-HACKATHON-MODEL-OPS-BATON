@@ -3,11 +3,14 @@ package com.likelion.yonsei.baton.common.web;
 import com.likelion.yonsei.baton.domain.modellab.security.ModelLabAdminInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.converter.AbstractJacksonHttpMessageConverter;
+import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -41,6 +44,18 @@ public class WebMvcConfig implements WebMvcConfigurer {
 		// Sole enforcement point for "Model Lab is admin-only" (spec section 27) — every
 		// /api/model-lab/** controller relies on this running first, instead of each doing its own check.
 		registry.addInterceptor(modelLabAdminInterceptor).addPathPatterns("/api/model-lab/**");
+	}
+
+	@Override
+	public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+		// The Jackson 3 message converter Spring Boot 4 auto-configures here defaults its response
+		// charset to ISO-8859-1, which silently mangles every Korean error/DTO string into '?' — force
+		// UTF-8 instead of leaving it to negotiate a charset per request.
+		for (HttpMessageConverter<?> converter : converters) {
+			if (converter instanceof AbstractJacksonHttpMessageConverter jacksonConverter) {
+				jacksonConverter.setDefaultCharset(StandardCharsets.UTF_8);
+			}
+		}
 	}
 
 	@Override
