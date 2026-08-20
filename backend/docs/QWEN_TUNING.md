@@ -248,17 +248,52 @@ Classification만 튜닝하다가 Generation(질문 → 분기 후보 생성)도
 
 **중요한 한계**: hard rule은 스키마 유효성(분기 개수/name/condition/decision 필드 존재)만
 확인한다. spec 4.3이 요구하는 진짜 품질 지표(Coverage/Separation/Granularity/Pre-decidability/
-Naturalness/Safety)는 **Human Review로만 판단해야 하며 이번 세션에서 LLM/자동 판정으로 대체하지
-않았다** — Human Review UI(`GenerationHumanReviewService`)는 이미 구현되어 있으니, 실제 프로덕션
-후보로 검토하려면 사람이 `/batons/models/generation`에서 직접 점수를 매겨야 한다. 눈으로 훑어본
-샘플(예: 인터뷰 일정 조율)은 내용상 합리적이었으나 이건 정식 Human Review가 아니다.
+Naturalness/Safety)는 Human Review 몫이다. 아래는 그 hard-rule을 통과한 39건(v2) 전체를 사람이
+직접 읽고 진단한 결과다 — `GenerationHumanReviewService` UI를 통한 정식 점수 매기기는 아직
+안 했고, 이건 그 전 단계의 정성적 결함 진단이다.
+
+### 사람이 직접 읽고 찾은 7개 실질 결함 (hard rule로는 안 걸림)
+
+1. **날짜/사실 지어내기**: 입력에 날짜 정보가 전혀 없는데 response_text에 "가능한 날짜는 4월
+   5일입니다"처럼 구체적 날짜를 지어냄 — spec 4.2 핵심 금지 규칙 정면 위반.
+2. **관점 역전**: "당신은 언제 입사 가능하신가요?"처럼 상대방에게 묻는 메시지인데, 생성된 분기가
+   "우리 회사는 다음 주부터 가능합니다"처럼 우리가 통보하는 것으로 뒤집힘.
+3. **condition_text가 상대방 답장이 아니라 우리 내부 절차**: "재무팀 승인 필요", "확인 후 답변"
+   같은 우리 쪽 프로세스를 조건으로 씀 — 조건은 반드시 상대방 답장에서 확인 가능한 내용이어야
+   한다.
+4. **분기 조건 겹침**: "1년 이내"와 "8~12개월 사이"가 겹쳐서 8개월 케이스가 두 분기 모두에
+   해당하는 모순 발생.
+5. **response_text가 되물음으로 끝남**: "인터뷰 진행해도 좋을까요?"처럼 이미 승인된 결정을
+   전달해야 할 자리에 다시 질문을 던짐 — BATON의 "왕복 줄이기" 취지에 정면으로 반함.
+6. **모순된 톤**: 좋은 소식(자리 있음)에 "죄송합니다"를 붙이는 등 내용과 톤 불일치.
+7. **언어 이탈**: 한국어/일본어/영어 질문인데 condition_text/decision_text/response_text가
+   중국어로 새는 현상 — Classification 때와 동일한 qwen 계열 특성.
+
+### v3 (7개 결함 타겟 수정) — 6개 완전 해결, 1개 부분 해결
+
+`GEN-qwen2.5-7b-v3-qualityfix` (prompt v3, temperature 0.3→0.1): 관점/조건정의/hallucination/
+겹침/되물음/모순 6개는 CORE 31건 재검토에서 전부 해결 확인. **언어 이탈만 부분 개선**
+(8개 국제 시나리오 중 8개 전부 문제 있던 것 → 2개만 남음).
+
+### v4 (언어 이탈 추가 수정 시도) — 역효과로 폐기
+
+"중국어(简体字/繁体字)는 절대 쓰지 마라"를 명시적으로 추가했더니 **오히려 악화** — 국제
+시나리오 8건 중 5건이 중국어 또는 심지어 러시아어까지 섞이며 무너짐(Dubai 시나리오는 중국어+
+러시아어+깨진 JSON 텍스트 조각까지 섞임). 특정 언어를 이름으로 지목하는 부정 지시가 그 언어를
+오히려 활성화시키는 역설적 효과로 보인다. **v4는 폐기, v3를 최종 후보로 확정.**
+
+### 최종 확정: `GEN-qwen2.5-7b-v3-qualityfix`
+
+31건 중 29건(93.5%) 완전히 정상, 2건만 언어 이탈 잔존. Coverage/Naturalness 같은 정식 Human
+Review 점수는 아직 `/batons/models/generation`에서 사람이 매겨야 한다 — 이 진단은 그 전 단계
+결함 스캔이며 정식 리뷰를 대체하지 않는다.
 
 ## 현재 상태 요약 (두 트랙 모두)
 
 | Track | 최종 후보 Config | 검증 규모 | 핵심 지표 |
 | --- | --- | --- | --- |
 | Classification | `CLS-qwen2.5-7b-v2-strict` (id=13) | v1 299건 + v2 294건 | False Auto-Send 0~1.5%, Branch Accuracy 65~86% |
-| Generation | `GEN-qwen2.5-7b-v2-korean` (id=19) | 39건 (SMOKE+CORE) | Hard rule 96.8~100%, Human Review 미실시 |
+| Generation | `GEN-qwen2.5-7b-v3-qualityfix` (id=20) | 39건 + 31건 재검토 | Hard rule 96.8~100%, 정성적 결함 진단 완료(7개 중 6개 해결), 정식 Human Review 점수는 미실시 |
 
 둘 다 여전히 DRAFT 상태 — Production 승격은 spec 15번 절차(Promote 확인 UI)를 통해 사람이
 명시적으로 결정할 것.
