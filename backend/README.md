@@ -196,9 +196,14 @@ V5__create_model_lab_schema.sql   ai_model_configs / ai_prompt_versions / ai_sch
                                    eval_runs / eval_results / generation_human_reviews /
                                    fine_tuning_jobs / model_deployment_history / users.is_admin
 V6__seed_model_lab_fixtures.sql   최소 Classification/Generation seed dataset
+V8__seed_scenario_dataset_v1.sql  BATON Scenario Dataset v1 (시나리오 50개 / reply case 350개)
 ```
 
-Eval 실행은 프로덕션과 동일한 `OpenAiClient`를 통해서만 OpenAI를 호출하며(`domain/modellab/service/ClassificationEvalRunnerService`, `GenerationEvalRunnerService`), 프로덕션 `baton`/`branch`/`classification`/`execution` 테이블은 절대 건드리지 않습니다. False Auto-Send 판정 로직은 `AutoSendGuardrail`에 있습니다.
+Eval 실행은 프로덕션과 동일한 `OpenAiClient`/`LocalLlmClient`(Ollama, Qwen3)를 통해서만 LLM을 호출하며(`domain/modellab/service/ClassificationEvalRunnerService`, `GenerationEvalRunnerService`), 프로덕션 `baton`/`branch`/`classification`/`execution` 테이블은 절대 건드리지 않습니다. False Auto-Send 판정 로직은 `AutoSendGuardrail`에 있습니다. Classification Eval Runner는 두 가지 출력 스키마를 모두 지원합니다 — 기존 multi-boolean 스키마와, 작은 로컬 모델을 위한 압축된 단일 `state` enum 스키마(schema version 2).
+
+Model Lab은 자체 Flyway 히스토리 테이블(`flyway_schema_history_model_lab`)을 사용해 프로덕션 백엔드의 마이그레이션 버전 번호와 완전히 분리되어 있습니다 — 배경은 [`docs/GABIA_DEPLOY_INCIDENT.md`](docs/GABIA_DEPLOY_INCIDENT.md) 참고.
+
+**qwen3:0.6b(로컬) 튜닝 시도 기록**: [`docs/QWEN_TUNING.md`](docs/QWEN_TUNING.md)에 4가지 prompt/schema 실험(v1~v4)과 결과를 정리했습니다. 결론: 현재 단일 호출 구조로는 qwen3:0.6b가 BATON Classification에 구조적으로 부적합(False Auto-Send 75%+, Ambiguous/Out-of-Scope Recall 0%가 4번 연속 재현됨, 모델이 긴 컨텍스트에서 실제 입력을 못 읽는 정황까지 확인됨) — 모든 `CLS-qwen3-0.6b-*` config는 DRAFT로 남겨두었고 Production 승격은 하지 않았습니다. 다음 시도 후보는 문서에 정리되어 있습니다.
 
 **알려진 한계**: 프로덕션 `BranchGenerationService`/`ClassificationService`는 아직 `ProductionModelRegistryService.getProductionConfig(...)`를 사용하지 않습니다. Promote/Rollback은 Model Lab 내부 상태까지만 보장하며, 실제 프로덕션 트래픽 전환은 후속 작업입니다. Fine-tuning Job 제출은 `501 Not Implemented`를 반환하는 스캐폴딩 상태입니다.
 

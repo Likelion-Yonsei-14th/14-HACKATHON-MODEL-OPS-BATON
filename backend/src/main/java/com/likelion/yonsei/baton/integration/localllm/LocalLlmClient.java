@@ -46,6 +46,21 @@ public class LocalLlmClient implements ChatCompletionClient {
 		return extractContent(callChatCompletions(request));
 	}
 
+	/**
+	 * Used by Model Lab's Eval Runner, which needs an explicit model + temperature per ModelConfig
+	 * rather than always talking to the one model configured in {@code ollama.model}. Ollama has no
+	 * token-usage accounting in its OpenAI-compat response, so token/cost metrics stay null for local
+	 * runs (the Eval Runner treats that as "unknown" rather than zero).
+	 */
+	public String chatJsonWithConfig(String model, Double temperature, String systemPrompt, String userPrompt) {
+		LocalLlmChatRequest request = LocalLlmChatRequest.ofJson(
+				model,
+				List.of(LocalLlmChatMessage.system(systemPrompt), LocalLlmChatMessage.user(userPrompt)),
+				temperature
+		);
+		return extractContent(callChatCompletions(request));
+	}
+
 	private String extractContent(LocalLlmChatResponse response) {
 		if (response == null || response.choices() == null || response.choices().isEmpty()) {
 			log.error("Local LLM returned an empty response body");

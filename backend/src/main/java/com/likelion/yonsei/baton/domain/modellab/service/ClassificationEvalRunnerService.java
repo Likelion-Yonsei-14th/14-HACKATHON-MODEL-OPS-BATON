@@ -15,6 +15,8 @@ import com.likelion.yonsei.baton.domain.modellab.exception.ModelLabErrorCode;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalReplyCaseRepository;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalResultRepository;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalRunRepository;
+import com.likelion.yonsei.baton.domain.modellab.entity.ModelLabProvider;
+import com.likelion.yonsei.baton.integration.localllm.LocalLlmClient;
 import com.likelion.yonsei.baton.integration.openai.OpenAiClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +55,7 @@ public class ClassificationEvalRunnerService {
 	private final EvalRunRepository evalRunRepository;
 	private final EvalResultRepository evalResultRepository;
 	private final OpenAiClient openAiClient;
+	private final LocalLlmClient localLlmClient;
 	private final ObjectMapper objectMapper;
 
 	public ClassificationEvalRunnerService(
@@ -63,6 +66,7 @@ public class ClassificationEvalRunnerService {
 			EvalRunRepository evalRunRepository,
 			EvalResultRepository evalResultRepository,
 			OpenAiClient openAiClient,
+			LocalLlmClient localLlmClient,
 			ObjectMapper objectMapper
 	) {
 		this.datasetService = datasetService;
@@ -72,7 +76,21 @@ public class ClassificationEvalRunnerService {
 		this.evalRunRepository = evalRunRepository;
 		this.evalResultRepository = evalResultRepository;
 		this.openAiClient = openAiClient;
+		this.localLlmClient = localLlmClient;
 		this.objectMapper = objectMapper;
+	}
+
+	/**
+	 * Routes to whichever {@link ModelLabProvider} the config declares. Ollama's OpenAI-compat API
+	 * has no usage accounting, so local runs report null input/output tokens (treated as "unknown",
+	 * not zero, by the cost/metrics aggregation below).
+	 */
+	private OpenAiClient.ChatJsonResult callModel(ModelLabProvider provider, String modelName, Double temperature, String systemPrompt, String userPrompt) {
+		if (provider == ModelLabProvider.OLLAMA) {
+			String content = localLlmClient.chatJsonWithConfig(modelName, temperature, systemPrompt, userPrompt);
+			return new OpenAiClient.ChatJsonResult(content, null, null);
+		}
+		return openAiClient.chatJsonWithConfig(modelName, temperature, systemPrompt, userPrompt);
 	}
 
 	public long previewCaseCount(Long datasetId, DatasetSplit split) {
@@ -151,8 +169,8 @@ public class ClassificationEvalRunnerService {
 
 				long startedAt = System.currentTimeMillis();
 				try {
-					OpenAiClient.ChatJsonResult llmResult = openAiClient.chatJsonWithConfig(
-							modelName, modelConfig.getTemperature().doubleValue(), promptVersion.getSystemPrompt(), userPrompt);
+					OpenAiClient.ChatJsonResult llmResult = callModel(
+							modelConfig.getProvider(), modelName, modelConfig.getTemperature().doubleValue(), promptVersion.getSystemPrompt(), userPrompt);
 					long latencyMs = System.currentTimeMillis() - startedAt;
 					latencySumMs += latencyMs;
 					if (llmResult.inputTokens() != null) inputTokenSum += llmResult.inputTokens();
@@ -163,18 +181,45 @@ public class ClassificationEvalRunnerService {
 					JsonNode actual = objectMapper.readTree(llmResult.content());
 					schemaValid++;
 
-					JsonNode selectedBranchIdNode = actual.path("selected_branch_id");
-					String selectedBranchKey = (selectedBranchIdNode.isMissingNode() || selectedBranchIdNode.isNull())
-							? null : selectedBranchIdNode.asText();
-					boolean selectedBranchValid = selectedBranchKey != null
-							&& goldenBranches.stream().anyMatch(b -> b.key().equals(selectedBranchKey));
-					BigDecimal confidence = actual.has("branch_match_confidence")
-							? new BigDecimal(actual.path("branch_match_confidence").asText("0"))
-							: null;
-					boolean isAmbiguous = actual.path("is_ambiguous").asBoolean(false);
-					boolean containsNewQuestion = actual.path("contains_new_question").asBoolean(false);
-					boolean containsOutOfScope = actual.path("contains_out_of_scope_content").asBoolean(false);
-					boolean promptInjection = actual.path("prompt_injection_suspected").asBoolean(false);
+					// Two output schemas are supported: the full multi-boolean v1 shape (selected_branch_id /
+					// is_ambiguous / contains_new_question / contains_out_of_scope_content / branch_match_confidence),
+					// and a compact single-"state"-enum shape (state / branch_id / confidence) aimed at small
+					// local models that reliably lose track of 4+ independent boolean judgments in one call
+					// (see docs/QWEN_TUNING.md) — a mutually-exclusive state collapses "is this reply safe to
+					// auto-send" into one categorical choice instead. Detected by presence of the "state" key.
+					String selectedBranchKey;
+					BigDecimal confidence;
+					boolean isAmbiguous;
+					boolean containsNewQuestion;
+					boolean containsOutOfScope;
+					boolean promptInjection;
+					if (actual.has("state")) {
+						String state = actual.path("state").asText("");
+						JsonNode branchIdNode = actual.path("branch_id");
+						selectedBranchKey = (branchIdNode.isMissingNode() || branchIdNode.isNull()) ? null : branchIdNode.asText();
+						confidence = actual.has("confidence") ? new BigDecimal(actual.path("confidence").asText("0")) : null;
+						isAmbiguous = "AMBIGUOUS".equals(state);
+						containsNewQuestion = "NEW_QUESTION".equals(state);
+						containsOutOfScope = "OUT_OF_SCOPE".equals(state);
+						promptInjection = false;
+						if ("NO_MATCH".equals(state)) {
+							selectedBranchKey = null;
+						}
+					} else {
+						JsonNode selectedBranchIdNode = actual.path("selected_branch_id");
+						selectedBranchKey = (selectedBranchIdNode.isMissingNode() || selectedBranchIdNode.isNull())
+								? null : selectedBranchIdNode.asText();
+						confidence = actual.has("branch_match_confidence")
+								? new BigDecimal(actual.path("branch_match_confidence").asText("0"))
+								: null;
+						isAmbiguous = actual.path("is_ambiguous").asBoolean(false);
+						containsNewQuestion = actual.path("contains_new_question").asBoolean(false);
+						containsOutOfScope = actual.path("contains_out_of_scope_content").asBoolean(false);
+						promptInjection = actual.path("prompt_injection_suspected").asBoolean(false);
+					}
+					String finalSelectedBranchKey = selectedBranchKey;
+					boolean selectedBranchValid = finalSelectedBranchKey != null
+							&& goldenBranches.stream().anyMatch(b -> b.key().equals(finalSelectedBranchKey));
 
 					if (replyCase.isExpectedAmbiguous()) {
 						ambiguousExpectedCount++;

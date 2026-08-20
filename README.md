@@ -71,7 +71,7 @@ Model Lab은 최소 두 종류의 AI 작업을 완전히 분리해서 관리합�
 2. **Models → Classification**에서 Model Config를 만듭니다 (model, temperature, confidence threshold, 사용할 Prompt Version 지정). 상태는 `DRAFT`로 시작합니다.
 3. **Datasets**에서 Eval Dataset과 Scenario, Golden Branch, Reply Case(멀티 메시지 지원)를 준비합니다. 최초 배포에는 seed fixture(clear match / ambiguous / no match / new question / out-of-scope / multi-message)가 포함되어 있습니다.
 4. Classification workspace에서 `SMOKE` / `CORE` / `HOLDOUT` split을 선택하면 실행 전 예상 case 수가 먼저 표시됩니다 (비용 통제).
-5. Run을 실행하면 서버가 각 Reply Case를 OpenAI structured output으로 분류하고, 반환된 branch id를 golden branch 목록과 대조 검증한 뒤 아래 지표를 계산합니다.
+5. Run을 실행하면 서버가 각 Reply Case를 Model Config에 설정된 Provider(OpenAI 또는 로컬 Ollama/Qwen3)로 structured output 분류하고, 반환된 branch id를 golden branch 목록과 대조 검증한 뒤 아래 지표를 계산합니다. 로컬 모델은 프로덕션과 동일한 `LocalLlmClient`(Ollama)를 재사용하며, 작은 모델을 위한 압축 스키마(단일 `state` enum)도 지원합니다 — 실제 튜닝 시도와 결과는 [`backend/docs/QWEN_TUNING.md`](backend/docs/QWEN_TUNING.md) 참고.
 
 ```text
 Branch Match Accuracy

@@ -13,6 +13,7 @@ import com.likelion.yonsei.baton.domain.modellab.entity.ModelLabTaskType;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalReplyCaseRepository;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalResultRepository;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalRunRepository;
+import com.likelion.yonsei.baton.integration.localllm.LocalLlmClient;
 import com.likelion.yonsei.baton.integration.openai.OpenAiClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,8 @@ class ClassificationEvalRunnerServiceTest {
 	private EvalResultRepository evalResultRepository;
 	@Mock
 	private OpenAiClient openAiClient;
+	@Mock
+	private LocalLlmClient localLlmClient;
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -94,7 +97,7 @@ class ClassificationEvalRunnerServiceTest {
 				.thenReturn(new OpenAiClient.ChatJsonResult(LLM_RESPONSE_HIGH_CONFIDENCE, 100, 20));
 
 		ClassificationEvalRunnerService runner = new ClassificationEvalRunnerService(
-				datasetService, modelConfigService, promptVersionService, replyCaseRepository, evalRunRepository, evalResultRepository, openAiClient, objectMapper);
+				datasetService, modelConfigService, promptVersionService, replyCaseRepository, evalRunRepository, evalResultRepository, openAiClient, localLlmClient, objectMapper);
 
 		ArgumentCaptor<EvalResult> lowThresholdCaptor = ArgumentCaptor.forClass(EvalResult.class);
 		runner.run(DATASET_ID, DatasetSplit.CORE, MODEL_CONFIG_ID, 1L);
@@ -122,7 +125,7 @@ class ClassificationEvalRunnerServiceTest {
 				.thenReturn(new OpenAiClient.ChatJsonResult(LLM_RESPONSE_HIGH_CONFIDENCE, 100, 20));
 
 		ClassificationEvalRunnerService runner = new ClassificationEvalRunnerService(
-				datasetService, modelConfigService, promptVersionService, replyCaseRepository, evalRunRepository, evalResultRepository, openAiClient, objectMapper);
+				datasetService, modelConfigService, promptVersionService, replyCaseRepository, evalRunRepository, evalResultRepository, openAiClient, localLlmClient, objectMapper);
 		runner.run(DATASET_ID, DatasetSplit.CORE, MODEL_CONFIG_ID, 1L);
 
 		ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
@@ -142,7 +145,7 @@ class ClassificationEvalRunnerServiceTest {
 				.thenReturn(new OpenAiClient.ChatJsonResult(LLM_RESPONSE_HIGH_CONFIDENCE, 100, 20));
 
 		ClassificationEvalRunnerService runner = new ClassificationEvalRunnerService(
-				datasetService, modelConfigService, promptVersionService, replyCaseRepository, evalRunRepository, evalResultRepository, openAiClient, objectMapper);
+				datasetService, modelConfigService, promptVersionService, replyCaseRepository, evalRunRepository, evalResultRepository, openAiClient, localLlmClient, objectMapper);
 		EvalRun run = runner.run(DATASET_ID, DatasetSplit.CORE, MODEL_CONFIG_ID, 1L);
 
 		var metrics = objectMapper.readTree(run.getAggregateMetricsJson());

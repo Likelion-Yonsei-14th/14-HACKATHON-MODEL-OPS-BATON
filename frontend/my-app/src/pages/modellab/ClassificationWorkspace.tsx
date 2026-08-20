@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { modelLabApi } from '../../api/modelLab/client'
-import type { DatasetSplit, EvalDataset, EvalResult, EvalRun, ModelConfig, PromptVersion } from '../../types/modelLab'
+import type { DatasetSplit, EvalDataset, EvalResult, EvalRun, ModelConfig, ModelLabProvider, PromptVersion } from '../../types/modelLab'
 import { EmptyState, MetricTile, MlBadge, MlButton, MlInput, MlPanel, MlSelect, PageHeader, formatPercent, statusTone } from './ui'
 
 const SPLITS: DatasetSplit[] = ['SMOKE', 'CORE', 'HOLDOUT']
@@ -201,18 +201,33 @@ export function ClassificationWorkspace() {
 
 function NewConfigForm({ promptVersions, onCreated }: { promptVersions: PromptVersion[]; onCreated: (c: ModelConfig) => void }) {
   const [name, setName] = useState('')
+  const [provider, setProvider] = useState<ModelLabProvider>('OPENAI')
   const [baseModel, setBaseModel] = useState('gpt-4o-mini')
   const [promptVersionId, setPromptVersionId] = useState(promptVersions[0]?.id ?? '')
   const [temperature, setTemperature] = useState('0.2')
   const [threshold, setThreshold] = useState('0.7')
   const [busy, setBusy] = useState(false)
 
+  function handleProviderChange(next: ModelLabProvider) {
+    setProvider(next)
+    // Swap in a sensible default base model for the newly selected provider — Qwen3 0.6B is the
+    // one model actually running in the local Ollama container (see LocalLlmProperties).
+    setBaseModel(next === 'OLLAMA' ? 'qwen3:0.6b' : 'gpt-4o-mini')
+  }
+
   return (
     <MlPanel title="새 Classification Config">
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-6 gap-3">
         <div>
           <label className="mb-1 block text-[11px] text-[#8b93a1]">이름</label>
           <MlInput onChange={(e) => setName(e.target.value)} placeholder="CLS-v2" value={name} />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] text-[#8b93a1]">Provider</label>
+          <MlSelect onChange={(e) => handleProviderChange(e.target.value as ModelLabProvider)} value={provider}>
+            <option value="OPENAI">OpenAI</option>
+            <option value="OLLAMA">Ollama (로컬 Qwen3)</option>
+          </MlSelect>
         </div>
         <div>
           <label className="mb-1 block text-[11px] text-[#8b93a1]">Base Model</label>
@@ -246,7 +261,7 @@ function NewConfigForm({ promptVersions, onCreated }: { promptVersions: PromptVe
             const c = await modelLabApi.createModelConfig({
               name,
               taskType: 'REPLY_CLASSIFICATION',
-              provider: 'OPENAI',
+              provider,
               baseModel,
               promptVersionId,
               temperature: Number(temperature),

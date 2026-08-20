@@ -9,7 +9,7 @@
 
 export type ModelLabTaskType = 'BRANCH_GENERATION' | 'REPLY_CLASSIFICATION'
 
-export type ModelLabProvider = 'OPENAI'
+export type ModelLabProvider = 'OPENAI' | 'OLLAMA'
 
 export type ModelConfigStatus = 'DRAFT' | 'EVALUATING' | 'STAGING' | 'PRODUCTION' | 'ARCHIVED'
 
