@@ -89,29 +89,60 @@ public class OpenAiClient implements ChatCompletionClient {
 		return response.choices().get(0).message().content();
 	}
 
+	/** Free/low-tier API keys can have single-digit requests-per-minute limits, which a sequential
+	 * Eval Runner sweeping dozens of cases hits immediately — retry a 429 with a fixed backoff
+	 * (OpenAI's rate-limit body already tells us it clears in a few seconds) instead of failing the
+	 * whole run on the first throttled call. */
+	private static final int RATE_LIMIT_MAX_RETRIES = 5;
+	private static final long RATE_LIMIT_BACKOFF_MS = 8000;
+
 	private OpenAiChatResponse callChatCompletions(OpenAiChatRequest request) {
-		try {
-			return openAiRestClient.post()
-					.uri("/chat/completions")
-					.body(request)
-					.retrieve()
-					.body(OpenAiChatResponse.class);
-		} catch (HttpClientErrorException e) {
-			throw mapClientError(e);
-		} catch (HttpServerErrorException e) {
-			log.error("OpenAI server error: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
-			throw new BusinessException(OpenAiErrorCode.UPSTREAM_ERROR);
-		} catch (ResourceAccessException e) {
-			if (e.getCause() instanceof SocketTimeoutException) {
-				log.error("OpenAI request timed out", e);
-				throw new BusinessException(OpenAiErrorCode.TIMEOUT);
+		for (int attempt = 0; ; attempt++) {
+			try {
+				return openAiRestClient.post()
+						.uri("/chat/completions")
+						.body(request)
+						.retrieve()
+						.body(OpenAiChatResponse.class);
+			} catch (HttpClientErrorException e) {
+				if (e.getStatusCode().value() == 429 && attempt < RATE_LIMIT_MAX_RETRIES) {
+					log.warn("OpenAI rate limited, retrying in {}ms (attempt {}/{})", RATE_LIMIT_BACKOFF_MS, attempt + 1, RATE_LIMIT_MAX_RETRIES);
+					sleep(RATE_LIMIT_BACKOFF_MS);
+					continue;
+				}
+				throw mapClientError(e);
+			} catch (HttpServerErrorException e) {
+				throw handleServerError(e);
+			} catch (ResourceAccessException e) {
+				throw handleAccessError(e);
+			} catch (RestClientException e) {
+				log.error("OpenAI request failed", e);
+				throw new BusinessException(OpenAiErrorCode.REQUEST_FAILED);
 			}
-			log.error("OpenAI request could not reach the server", e);
-			throw new BusinessException(OpenAiErrorCode.REQUEST_FAILED);
-		} catch (RestClientException e) {
-			log.error("OpenAI request failed", e);
+		}
+	}
+
+	private void sleep(long millis) {
+		try {
+			Thread.sleep(millis);
+		} catch (InterruptedException ie) {
+			Thread.currentThread().interrupt();
 			throw new BusinessException(OpenAiErrorCode.REQUEST_FAILED);
 		}
+	}
+
+	private BusinessException handleServerError(HttpServerErrorException e) {
+		log.error("OpenAI server error: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
+		return new BusinessException(OpenAiErrorCode.UPSTREAM_ERROR);
+	}
+
+	private BusinessException handleAccessError(ResourceAccessException e) {
+		if (e.getCause() instanceof SocketTimeoutException) {
+			log.error("OpenAI request timed out", e);
+			return new BusinessException(OpenAiErrorCode.TIMEOUT);
+		}
+		log.error("OpenAI request could not reach the server", e);
+		return new BusinessException(OpenAiErrorCode.REQUEST_FAILED);
 	}
 
 	private BusinessException mapClientError(HttpClientErrorException e) {

@@ -91,11 +91,44 @@ CPU 환경에서 호출당 20~30초가 걸리는 걸 고려하면 eval 자체가
 1개, immutable, Promote 시 확인 절차" 안전장치가 정확히 이런 상황을 막기 위한 것이다. 지금까지의
 모든 `CLS-qwen3-0.6b-*` config는 DRAFT 상태로 남겨둔다.
 
-## 다음으로 시도할 것 (이번 세션 범위 밖)
+## Follow-up 1: OpenAI 기준선 — 계정 쿼터로 차단됨
 
-1. **Task Decomposition (Experiment 3/4)**: 분기 매칭과 안전 신호 판단을 분리된 호출로 쪼갠다.
-   가장 유력한 다음 실험이지만 CPU 환경에서 호출 수 증가는 evaluation 시간을 크게 늘린다.
-2. **더 큰 로컬 모델**: qwen2.5:1.5b 또는 3b 등, 같은 Ollama 인프라에서 시도 가능한 다음 크기.
-3. **OpenAI 모델을 이 데이터셋 기준선으로 확보**: `CLS-seed-v1`(OpenAI, gpt-4o-mini)을 이
-   dataset(v1, 350건)에 대해 실행해 실제 상한선을 확인하지 않았다 — 로컬 모델과의 격차를
-   정량적으로 비교하려면 이것부터 하는 게 맞다.
+`CLS-seed-v1`(OpenAI, gpt-4o-mini)로 이 dataset의 실제 상한선을 확인하려 했으나, 연결된 OpenAI
+계정이 **RPD(하루 요청 한도) 50건 무료 티어**라 이미 소진된 상태였다. 재시도 백오프
+(`OpenAiClient`에 429 재시도 로직 추가함, 최대 5회/8초 간격)를 넣었지만 RPM이 아니라 RPD(일일)
+한도라 재시도로는 못 뚫는다 — 결제수단을 계정에 등록해야 풀리는 문제라 이 세션에서는 해결 불가.
+필요하면 OpenAI 계정에 결제수단 등록 후 `CLS-seed-v1` config로 SMOKE run을 실행해서 기준선을
+잡을 것.
+
+## Follow-up 2: qwen2.5:1.5b (더 큰 로컬 모델) — 부분적 개선, 아직 production 아님
+
+`qwen2.5:1.5b`(qwen3:0.6b 대비 2.5배 큰 모델, Ollama에 추가로 pull)로 두 번 테스트:
+
+| Config | Prompt | 비고 | Branch Accuracy | Ambiguous Recall | New Question Recall | Out-of-Scope Recall | False Auto-Send | Latency/case |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CLS-qwen2.5-1.5b-v1 | v1 (영어 원본 seed) | 언어 불일치로 중국어 추론 확인, 무효 | 0.1042 | 0.0 | 0.0 | 0.0 | 0.4583* | ~8.5s |
+| CLS-qwen2.5-1.5b-v2-decisionstate | v5 (한국어, decision-state) | SMOKE 56건 전체 | **0.3125** | **0.5** | 0.375 | 0.0 | **0.3333** | ~5.6s |
+
+*v1 실행의 낮은 False Auto-Send는 실제 안전 판단이 아니라 `selected_branch_id`가 스키마와 안 맞아
+거의 항상 무효화된 부작용 — 무시할 것. v2(한국어 프롬프트)가 처음으로 언어를 맞춘 공정한 비교다.
+
+**첫 유의미한 신호**: v2에서 실제 ambiguous case(BATON-002의 진짜 애매한 답장)를 처음으로 정확히
+`AMBIGUOUS`로 잡아냈다 — 0.6b는 8번의 실험 내내 단 한 번도 진짜 ambiguous를 못 잡았다. 8번의
+실험 전체를 통틀어 False Auto-Send가 처음으로 50% 밑으로(33.3%) 내려왔다.
+
+**하지만 여전히 미달**: branch_match_accuracy는 여전히 0.31로 낮고(날짜 산술 오류 지속 — "4월
+첫째 주"를 LATE_MARCH로 잘못 판단하는 등), out_of_scope_recall은 여전히 0.0, false_auto_send
+33.3%는 프로덕션 기준(< 0.05)과는 거리가 멀다. 또한 한 사례(id 294)에서 해당 시나리오에 존재하지
+않는 "APPROVE" 조건을 reasoning에서 언급하는 등 다른 시나리오와의 컨텍스트 혼동으로 보이는 현상도
+관찰됨 — few-shot 예시(APPROVE가 예시 3/4에 등장)를 실제 케이스와 혼동하는 것으로 추정.
+
+**결론**: 모델을 키우니 방향은 맞게 개선됐다(질적으로 다른 실패 모드: 0.6b는 신호를 아예 못 읽고,
+1.5b는 신호를 감지는 하지만 아직 부정확). 이는 Model Lab 결론 B(Task decomposition 필요)를
+약화시키지 않는다 — 오히려 "모델 크기를 계속 올리는 것"과 "task를 쪼개는 것" 둘 다 유효한 다음
+방향이라는 근거가 된다. 다음 시도 우선순위:
+
+1. qwen2.5:3b 또는 7b로 같은 v5 프롬프트 재현 (더 큰 모델일수록 서버 메모리 여유 확인 필요 —
+   현재 서버는 3.6GB RAM, 1.5b도 빠듯함)
+2. Task Decomposition (분기 매칭 / 안전 판단 분리 호출) — 여전히 유효한 방향, 특히 out_of_scope
+   가 모든 모델 크기에서 0%인 것을 보면 "한 번에 여러 신호"가 근본 병목일 가능성이 높음
+3. OpenAI 결제수단 등록 후 기준선 확보 — 로컬 모델 격차를 정량화하는 데 필요
