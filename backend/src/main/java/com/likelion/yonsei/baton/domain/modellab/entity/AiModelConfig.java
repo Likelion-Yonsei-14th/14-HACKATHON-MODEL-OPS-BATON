@@ -55,6 +55,17 @@ public class AiModelConfig {
 	@Column(name = "schema_version_id")
 	private Long schemaVersionId;
 
+	/**
+	 * Optional second-stage prompt for the "task decomposition" experiment (docs/QWEN_TUNING.md
+	 * Follow-up 3): when set, {@code promptVersionId} is used for a safety-only judgment call
+	 * (SAFE/AMBIGUOUS/NEW_QUESTION/OUT_OF_SCOPE/NO_MATCH, no branch selection) and this prompt is
+	 * used for a second, branch-selection-only call, fired only when stage 1 says SAFE. Null means
+	 * the classic single-call flow. No business constructor param on purpose — this is set directly
+	 * via SQL for the experimental config rather than exposed in the config-creation UI yet.
+	 */
+	@Column(name = "stage2_prompt_version_id")
+	private Long stage2PromptVersionId;
+
 	@Column(nullable = false, precision = 3, scale = 2)
 	private BigDecimal temperature;
 
@@ -158,6 +169,10 @@ public class AiModelConfig {
 
 	public Long getSchemaVersionId() {
 		return schemaVersionId;
+	}
+
+	public Long getStage2PromptVersionId() {
+		return stage2PromptVersionId;
 	}
 
 	public BigDecimal getTemperature() {

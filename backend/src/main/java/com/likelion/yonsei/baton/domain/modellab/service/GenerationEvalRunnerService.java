@@ -10,8 +10,10 @@ import com.likelion.yonsei.baton.domain.modellab.entity.EvalRun;
 import com.likelion.yonsei.baton.domain.modellab.entity.EvalScenario;
 import com.likelion.yonsei.baton.domain.modellab.entity.ModelLabTaskType;
 import com.likelion.yonsei.baton.domain.modellab.exception.ModelLabErrorCode;
+import com.likelion.yonsei.baton.domain.modellab.entity.ModelLabProvider;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalResultRepository;
 import com.likelion.yonsei.baton.domain.modellab.repository.EvalRunRepository;
+import com.likelion.yonsei.baton.integration.localllm.LocalLlmClient;
 import com.likelion.yonsei.baton.integration.openai.OpenAiClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +44,7 @@ public class GenerationEvalRunnerService {
 	private final EvalRunRepository evalRunRepository;
 	private final EvalResultRepository evalResultRepository;
 	private final OpenAiClient openAiClient;
+	private final LocalLlmClient localLlmClient;
 	private final ObjectMapper objectMapper;
 
 	public GenerationEvalRunnerService(
@@ -51,6 +54,7 @@ public class GenerationEvalRunnerService {
 			EvalRunRepository evalRunRepository,
 			EvalResultRepository evalResultRepository,
 			OpenAiClient openAiClient,
+			LocalLlmClient localLlmClient,
 			ObjectMapper objectMapper
 	) {
 		this.datasetService = datasetService;
@@ -59,7 +63,18 @@ public class GenerationEvalRunnerService {
 		this.evalRunRepository = evalRunRepository;
 		this.evalResultRepository = evalResultRepository;
 		this.openAiClient = openAiClient;
+		this.localLlmClient = localLlmClient;
 		this.objectMapper = objectMapper;
+	}
+
+	/** Mirrors ClassificationEvalRunnerService.callModel — same shared-inference-path requirement
+	 * (spec section 17), same provider dispatch. */
+	private OpenAiClient.ChatJsonResult callModel(ModelLabProvider provider, String modelName, Double temperature, String systemPrompt, String userPrompt) {
+		if (provider == ModelLabProvider.OLLAMA) {
+			String content = localLlmClient.chatJsonWithConfig(modelName, temperature, systemPrompt, userPrompt);
+			return new OpenAiClient.ChatJsonResult(content, null, null);
+		}
+		return openAiClient.chatJsonWithConfig(modelName, temperature, systemPrompt, userPrompt);
 	}
 
 	@Transactional
@@ -101,8 +116,8 @@ public class GenerationEvalRunnerService {
 
 			long startedAt = System.currentTimeMillis();
 			try {
-				OpenAiClient.ChatJsonResult llmResult = openAiClient.chatJsonWithConfig(
-						modelName, modelConfig.getTemperature().doubleValue(), promptVersion.getSystemPrompt(), userPrompt);
+				OpenAiClient.ChatJsonResult llmResult = callModel(
+						modelConfig.getProvider(), modelName, modelConfig.getTemperature().doubleValue(), promptVersion.getSystemPrompt(), userPrompt);
 				long latencyMs = System.currentTimeMillis() - startedAt;
 
 				HardRuleOutcome outcome = applyHardRules(llmResult.content());

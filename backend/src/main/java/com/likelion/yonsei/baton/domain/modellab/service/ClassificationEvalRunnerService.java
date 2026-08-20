@@ -29,6 +29,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The Classification Eval Runner (spec section 18): loads a dataset split, replays every reply
@@ -108,6 +109,9 @@ public class ClassificationEvalRunnerService {
 			throw new BusinessException(ModelLabErrorCode.TASK_TYPE_MISMATCH);
 		}
 		AiPromptVersion promptVersion = promptVersionService.getById(modelConfig.getPromptVersionId());
+		AiPromptVersion stage2Prompt = modelConfig.getStage2PromptVersionId() != null
+				? promptVersionService.getById(modelConfig.getStage2PromptVersionId())
+				: null;
 
 		List<EvalScenario> scenarios = datasetService.listScenariosForSplit(datasetId, split);
 		if (scenarios.isEmpty()) {
@@ -169,53 +173,38 @@ public class ClassificationEvalRunnerService {
 
 				long startedAt = System.currentTimeMillis();
 				try {
-					OpenAiClient.ChatJsonResult llmResult = callModel(
-							modelConfig.getProvider(), modelName, modelConfig.getTemperature().doubleValue(), promptVersion.getSystemPrompt(), userPrompt);
+					ClassificationOutcome outcome = stage2Prompt != null
+							? classifyTwoStage(modelConfig, modelName, promptVersion, stage2Prompt, userPrompt)
+							: classifySingleCall(modelConfig, modelName, promptVersion, userPrompt);
 					long latencyMs = System.currentTimeMillis() - startedAt;
 					latencySumMs += latencyMs;
-					if (llmResult.inputTokens() != null) inputTokenSum += llmResult.inputTokens();
-					if (llmResult.outputTokens() != null) outputTokenSum += llmResult.outputTokens();
-					BigDecimal caseCost = estimateCost(llmResult.inputTokens(), llmResult.outputTokens());
+					if (outcome.inputTokens() != null) inputTokenSum += outcome.inputTokens();
+					if (outcome.outputTokens() != null) outputTokenSum += outcome.outputTokens();
+					BigDecimal caseCost = estimateCost(outcome.inputTokens(), outcome.outputTokens());
 					costSum = costSum.add(caseCost);
-
-					JsonNode actual = objectMapper.readTree(llmResult.content());
 					schemaValid++;
 
-					// Two output schemas are supported: the full multi-boolean v1 shape (selected_branch_id /
-					// is_ambiguous / contains_new_question / contains_out_of_scope_content / branch_match_confidence),
-					// and a compact single-"state"-enum shape (state / branch_id / confidence) aimed at small
-					// local models that reliably lose track of 4+ independent boolean judgments in one call
-					// (see docs/QWEN_TUNING.md) — a mutually-exclusive state collapses "is this reply safe to
-					// auto-send" into one categorical choice instead. Detected by presence of the "state" key.
-					String selectedBranchKey;
-					BigDecimal confidence;
-					boolean isAmbiguous;
-					boolean containsNewQuestion;
-					boolean containsOutOfScope;
-					boolean promptInjection;
-					if (actual.has("state")) {
-						String state = actual.path("state").asText("");
-						JsonNode branchIdNode = actual.path("branch_id");
-						selectedBranchKey = (branchIdNode.isMissingNode() || branchIdNode.isNull()) ? null : branchIdNode.asText();
-						confidence = actual.has("confidence") ? new BigDecimal(actual.path("confidence").asText("0")) : null;
-						isAmbiguous = "AMBIGUOUS".equals(state);
-						containsNewQuestion = "NEW_QUESTION".equals(state);
-						containsOutOfScope = "OUT_OF_SCOPE".equals(state);
-						promptInjection = false;
-						if ("NO_MATCH".equals(state)) {
+					String selectedBranchKey = outcome.selectedBranchKey();
+					BigDecimal confidence = outcome.confidence();
+					boolean isAmbiguous = outcome.isAmbiguous();
+					boolean containsNewQuestion = outcome.containsNewQuestion();
+					boolean containsOutOfScope = outcome.containsOutOfScope();
+					boolean promptInjection = outcome.promptInjection();
+
+					// Deterministic correction (docs/QWEN_TUNING.md Follow-up 5): only overrides when every
+					// golden branch parses as a clean calendar-date range AND the reply contains an
+					// unambiguous date mention — the model's own branch/ambiguity call passes through
+					// untouched otherwise. Never turns an ambiguous flag off, only on (a keyword-level date
+					// clash the model missed is still a real clash even if it also spotted something else).
+					Optional<DateRangeGuardrail.BranchOverride> dateOverride = DateRangeGuardrail.resolve(goldenBranches, replyMessages);
+					if (dateOverride.isPresent()) {
+						DateRangeGuardrail.BranchOverride ov = dateOverride.get();
+						if (ov.ambiguous()) {
+							isAmbiguous = true;
 							selectedBranchKey = null;
+						} else {
+							selectedBranchKey = ov.branchKey();
 						}
-					} else {
-						JsonNode selectedBranchIdNode = actual.path("selected_branch_id");
-						selectedBranchKey = (selectedBranchIdNode.isMissingNode() || selectedBranchIdNode.isNull())
-								? null : selectedBranchIdNode.asText();
-						confidence = actual.has("branch_match_confidence")
-								? new BigDecimal(actual.path("branch_match_confidence").asText("0"))
-								: null;
-						isAmbiguous = actual.path("is_ambiguous").asBoolean(false);
-						containsNewQuestion = actual.path("contains_new_question").asBoolean(false);
-						containsOutOfScope = actual.path("contains_out_of_scope_content").asBoolean(false);
-						promptInjection = actual.path("prompt_injection_suspected").asBoolean(false);
 					}
 					String finalSelectedBranchKey = selectedBranchKey;
 					boolean selectedBranchValid = finalSelectedBranchKey != null
@@ -257,13 +246,13 @@ public class ClassificationEvalRunnerService {
 							run.getId(), scenario.getId(), replyCase.getId(),
 							buildInputSnapshot(scenario, goldenBranches, replyMessages),
 							objectMapper.writeValueAsString(expectedNode),
-							llmResult.content(),
+							outcome.rawContent(),
 							passed,
 							autoSendExpected,
 							autoSendActual,
 							latencyMs,
-							llmResult.inputTokens(),
-							llmResult.outputTokens(),
+							outcome.inputTokens(),
+							outcome.outputTokens(),
 							caseCost,
 							null
 					);
@@ -356,6 +345,115 @@ public class ClassificationEvalRunnerService {
 		node.putPOJO("golden_branches", branches);
 		node.putPOJO("reply_messages", replyMessages);
 		return objectMapper.writeValueAsString(node);
+	}
+
+	/** Normalized result of classifying one reply case, regardless of whether it took one model call
+	 * or two (docs/QWEN_TUNING.md Follow-up 3: task decomposition). {@code rawContent} is whatever
+	 * gets stored as the audit trail in {@code eval_results.actual_json} — the single call's raw JSON,
+	 * or both stages' JSON concatenated for the two-stage path. */
+	private record ClassificationOutcome(
+			String rawContent,
+			Integer inputTokens,
+			Integer outputTokens,
+			String selectedBranchKey,
+			BigDecimal confidence,
+			boolean isAmbiguous,
+			boolean containsNewQuestion,
+			boolean containsOutOfScope,
+			boolean promptInjection
+	) {
+	}
+
+	private ClassificationOutcome classifySingleCall(AiModelConfig modelConfig, String modelName, AiPromptVersion promptVersion, String userPrompt) {
+		OpenAiClient.ChatJsonResult llmResult = callModel(
+				modelConfig.getProvider(), modelName, modelConfig.getTemperature().doubleValue(), promptVersion.getSystemPrompt(), userPrompt);
+		JsonNode actual = objectMapper.readTree(llmResult.content());
+
+		// Two output schemas are supported: the full multi-boolean v1 shape (selected_branch_id /
+		// is_ambiguous / contains_new_question / contains_out_of_scope_content / branch_match_confidence),
+		// and a compact single-"state"-enum shape (state / branch_id / confidence) aimed at small
+		// local models that reliably lose track of 4+ independent boolean judgments in one call
+		// (see docs/QWEN_TUNING.md) — a mutually-exclusive state collapses "is this reply safe to
+		// auto-send" into one categorical choice instead. Detected by presence of the "state" key.
+		String selectedBranchKey;
+		BigDecimal confidence;
+		boolean isAmbiguous;
+		boolean containsNewQuestion;
+		boolean containsOutOfScope;
+		boolean promptInjection;
+		if (actual.has("state")) {
+			String state = actual.path("state").asText("");
+			JsonNode branchIdNode = actual.path("branch_id");
+			selectedBranchKey = (branchIdNode.isMissingNode() || branchIdNode.isNull()) ? null : branchIdNode.asText();
+			confidence = actual.has("confidence") ? new BigDecimal(actual.path("confidence").asText("0")) : null;
+			isAmbiguous = "AMBIGUOUS".equals(state);
+			containsNewQuestion = "NEW_QUESTION".equals(state);
+			containsOutOfScope = "OUT_OF_SCOPE".equals(state);
+			promptInjection = false;
+			if ("NO_MATCH".equals(state)) {
+				selectedBranchKey = null;
+			}
+		} else {
+			JsonNode selectedBranchIdNode = actual.path("selected_branch_id");
+			selectedBranchKey = (selectedBranchIdNode.isMissingNode() || selectedBranchIdNode.isNull())
+					? null : selectedBranchIdNode.asText();
+			confidence = actual.has("branch_match_confidence")
+					? new BigDecimal(actual.path("branch_match_confidence").asText("0"))
+					: null;
+			isAmbiguous = actual.path("is_ambiguous").asBoolean(false);
+			containsNewQuestion = actual.path("contains_new_question").asBoolean(false);
+			containsOutOfScope = actual.path("contains_out_of_scope_content").asBoolean(false);
+			promptInjection = actual.path("prompt_injection_suspected").asBoolean(false);
+		}
+		return new ClassificationOutcome(llmResult.content(), llmResult.inputTokens(), llmResult.outputTokens(),
+				selectedBranchKey, confidence, isAmbiguous, containsNewQuestion, containsOutOfScope, promptInjection);
+	}
+
+	/**
+	 * Task decomposition (docs/QWEN_TUNING.md Follow-up 3): stage 1 makes ONLY the safety judgment
+	 * (SAFE / AMBIGUOUS / NEW_QUESTION / OUT_OF_SCOPE / NO_MATCH, no branch id) using the same
+	 * compact-state schema as {@link #classifySingleCall}; stage 2 — fired only when stage 1 said
+	 * SAFE — makes ONLY the branch selection, on the hypothesis (from the single-call experiments in
+	 * docs/QWEN_TUNING.md) that a small model handles each judgment far more reliably in isolation
+	 * than bundled together. If stage 1 says unsafe, stage 2 is skipped entirely — there is no branch
+	 * to pick when the reply isn't going to auto-send regardless.
+	 */
+	private ClassificationOutcome classifyTwoStage(
+			AiModelConfig modelConfig, String modelName, AiPromptVersion stage1Prompt, AiPromptVersion stage2Prompt, String userPrompt
+	) {
+		double temperature = modelConfig.getTemperature().doubleValue();
+		OpenAiClient.ChatJsonResult stage1Result = callModel(modelConfig.getProvider(), modelName, temperature, stage1Prompt.getSystemPrompt(), userPrompt);
+		JsonNode stage1 = objectMapper.readTree(stage1Result.content());
+		String state = stage1.path("state").asText("");
+		BigDecimal confidence = stage1.has("confidence") ? new BigDecimal(stage1.path("confidence").asText("0")) : null;
+		boolean isAmbiguous = "AMBIGUOUS".equals(state);
+		boolean containsNewQuestion = "NEW_QUESTION".equals(state);
+		boolean containsOutOfScope = "OUT_OF_SCOPE".equals(state);
+		boolean safe = "SAFE_MATCH".equals(state);
+
+		if (!safe) {
+			return new ClassificationOutcome(stage1Result.content(), stage1Result.inputTokens(), stage1Result.outputTokens(),
+					null, confidence, isAmbiguous, containsNewQuestion, containsOutOfScope, false);
+		}
+
+		OpenAiClient.ChatJsonResult stage2Result = callModel(modelConfig.getProvider(), modelName, temperature, stage2Prompt.getSystemPrompt(), userPrompt);
+		JsonNode stage2 = objectMapper.readTree(stage2Result.content());
+		JsonNode branchIdNode = stage2.path("branch_id");
+		String selectedBranchKey = (branchIdNode.isMissingNode() || branchIdNode.isNull()) ? null : branchIdNode.asText();
+		if (stage2.has("confidence")) {
+			confidence = new BigDecimal(stage2.path("confidence").asText("0"));
+		}
+
+		Integer inputTokens = sumNullable(stage1Result.inputTokens(), stage2Result.inputTokens());
+		Integer outputTokens = sumNullable(stage1Result.outputTokens(), stage2Result.outputTokens());
+		String combinedRaw = "{\"stage1\":" + stage1Result.content() + ",\"stage2\":" + stage2Result.content() + "}";
+		return new ClassificationOutcome(combinedRaw, inputTokens, outputTokens,
+				selectedBranchKey, confidence, false, false, false, false);
+	}
+
+	private Integer sumNullable(Integer a, Integer b) {
+		if (a == null && b == null) return null;
+		return (a == null ? 0 : a) + (b == null ? 0 : b);
 	}
 
 	private String buildUserPrompt(EvalScenario scenario, List<GoldenBranch> branches, List<String> replyMessages) {

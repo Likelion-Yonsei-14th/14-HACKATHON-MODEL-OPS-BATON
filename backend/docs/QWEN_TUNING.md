@@ -132,3 +132,133 @@ CPU 환경에서 호출당 20~30초가 걸리는 걸 고려하면 eval 자체가
 2. Task Decomposition (분기 매칭 / 안전 판단 분리 호출) — 여전히 유효한 방향, 특히 out_of_scope
    가 모든 모델 크기에서 0%인 것을 보면 "한 번에 여러 신호"가 근본 병목일 가능성이 높음
 3. OpenAI 결제수단 등록 후 기준선 확보 — 로컬 모델 격차를 정량화하는 데 필요
+
+## Follow-up 3: 데스크탑 GPU(RTX 2060) + Task Decomposition + qwen2.5:7b — 목표 달성
+
+가비아 서버가 CPU-only라 eval 한 번에 20~30분씩 걸리는 문제를 해결하려고, 팀원 데스크탑의 Ollama를
+Tailscale로 가비아 서버에 연결했다(`OLLAMA_BASE_URL`을 데스크탑 Tailscale IP로 변경, 코드 변경
+없음). 그 결과 latency가 5~30초/case → 0.2~7초/case로 떨어져 CORE(294건) 전체를 20분 안에 돌릴 수
+있게 됐다 — 이게 이후 모든 실험의 반복 속도를 근본적으로 바꿨다.
+
+동시에 두 가지를 시도했다: (a) Task Decomposition을 실제로 구현(`ClassificationEvalRunnerService.
+classifyTwoStage` — stage1 안전 판정만, stage2 분기 선택만, `ai_model_configs.stage2_prompt_
+version_id`로 마킹), (b) `qwen2.5:7b`(1.5b의 5배 크기)로 재현.
+
+**핵심 발견: 모델 크기가 지배적 변수였다.** two-stage 분리 자체는 미미한 개선에 그쳤지만(branch
+accuracy 0.31→0.33), 같은 프롬프트를 qwen2.5:7b로만 바꿨을 때 branch accuracy 0.58, **False
+Auto-Send가 처음으로 0%**를 기록했다 (SMOKE, run 16). CORE(294건, run 17~18)에서도 False
+Auto-Send 1.53~6.35%로 유지됐다. **threshold를 0.55→0.90/0.95로 올리는 것도 유효한 레버였다**
+(같은 config, threshold만 올려서 False Auto-Send 33%→17%→1.5%까지 내려감, 단 그만큼
+Auto-Send Coverage도 같이 낮아짐 — trade-off, 다만 confidence가 실제로 correctness와 상관관계가
+있을 때만 threshold가 의미 있다. qwen3/1.5b에서는 confidence가 거의 상수라 threshold를 올려도
+"거의 다 막힘" 아니면 "거의 다 통과" 둘 중 하나였는데, 7b는 threshold 0.90 vs 0.95 사이에서 실제
+False Auto-Send가 유의미하게 갈렸다 — 즉 7b는 confidence가 처음으로 진짜 판별력을 가짐).
+
+**최종 후보로 확정: `CLS-qwen2.5-7b-v2-strict`** (id=13, prompt v5 decision-state, threshold
+0.95). CORE 299건: branch accuracy 0.65, False Auto-Send **0.0153** (production 기준 < 0.05
+최초 통과).
+
+시도했지만 폐기한 것 (`CLS-qwen2.5-7b-v3-tightened`, prompt v8): "NO_MATCH 남발하지 마라"는
+지시를 추가했더니 branch accuracy는 그대로인데 ambiguous/new_question recall이 급락하고
+False Auto-Send가 다시 0.076으로 악화됨 — 모델이 안전 신호 전반을 덜 잡는 쪽으로 과보정된 것.
+프롬프트를 한 방향으로 밀면 다른 방향이 깨지는 전형적 trade-off라 되돌림.
+
+## Follow-up 4: 두 번째 독립 데이터셋으로 일반화 검증 — v1의 낮은 정확도는 모델 한계가 아니라 도메인 난이도였다
+
+`BATON Scenario Dataset v2 (generalization)`: v1과 동일 규모(50 시나리오/350건)지만 완전히 다른
+10개 도메인(보증 심사, 레스토랑 예약, 수강신청, 출장 승인, 채용 온보딩, 제조 불량률, 웨딩홀 예약,
+환불, API rate limit, 사무실 재계약)으로 새로 작성. 의도적으로 날짜 범위 조건 비중을 낮추고
+가격/수량/승인여부 같은 비-날짜 조건을 늘림 (`scratch/gen_dataset_v2.py`로 생성, 마이그레이션
+V22).
+
+같은 config(`CLS-qwen2.5-7b-v2-strict`)로 그대로 실행한 결과:
+
+| 지표 | v1 (날짜 위주) | v2 (일반 도메인) |
+| --- | --- | --- |
+| Branch Accuracy | 65.1% | **85.7%** |
+| False Auto-Send | 1.53% | **0%** |
+| Ambiguous Recall | 33.3% | 85.7% |
+| New Question Recall | 73.8% | 100% |
+| Out-of-Scope Recall | 64.3% | 66.7% |
+
+**결론 확정**: 모델/프롬프트/threshold 전부 동일한데 도메인만 바꿨더니 branch accuracy가
+20%p 넘게 올랐다. v1의 65%는 모델의 일반적 한계가 아니라 **그 데이터셋 특유의 날짜 범위 산술
+난이도** 때문이었다. 일반적인 비-날짜 도메인에서는 이미 실사용 가능한 수준.
+
+### DateRangeGuardrail 영어 확장
+
+v2 데이터셋의 국제 시나리오(영어 날짜: "Sep 15", "Before Oct 1", "After Oct 7" 등)에서 모델이
+날짜 산술을 놓치는 사례를 발견해, 결정론적 날짜 파서(`DateRangeGuardrail`)를 영어 월 이름까지
+지원하도록 확장(V21). 단위테스트로 실제 실패 케이스("Sep 30 if compliance clears...; otherwise
+Oct 4." → 정확히 AMBIGUOUS로 판정) 검증 완료.
+
+### v2 데이터셋 자체의 저작 버그 2건 발견 및 수정
+
+실패 케이스를 파다 보니 모델이 아니라 **내가 만든 데이터셋의 문구 버그**를 2건 발견:
+1. 여행 승인 시나리오(BATON2-031~035)에서 영어 시나리오인데 `BUDGET_HOLD` 분기 조건문만 한국어로
+   남아있어 모델이 매칭을 못 함 → 영어로 통일(V23).
+2. 교육 시나리오 R7(out-of-scope) 문구 "커리큘럼이 변경됩니다"가 out-of-scope라기엔 애매해서
+   "수강료가 10% 인상됩니다"로 명확화(V23).
+3. 위 수정 후 새로 드러난 문제: DENIED 답장 문구("can't be approved")가 "보류/재검토"
+   뉘앙스와 겹쳐 BUDGET_HOLD와 계속 혼동됨 → "decline"으로 명확히 재작성(V24).
+
+세 번 다 재실행해서 회귀 확인함 — branch accuracy/False Auto-Send 지속 개선, 부작용 없음.
+
+### R4 특이 패턴: "분기가 전부 날짜 조건은 아니다" — 프롬프트 구조적 개선 (v9)
+
+reply-type별(R1~R7) pass rate를 쪼개보니 R4(4번째 clear-match 패턴)만 유독 50%로 낮았다(나머지는
+81~95%). 원인: 채용 온보딩(DECLINE, "오퍼 거절 의사"), 웨딩(DEPOSIT_NEEDED, "가계약금 입금")처럼
+분기 목록에 날짜형과 비날짜형이 섞여 있으면, 모델이 비날짜 분기까지 "날짜 범위에 들어가는가"로
+검사하려다 실패하고 NO_MATCH로 도피하는 패턴이 3개 무관한 도메인에서 반복됨.
+
+prompt v9로 "분기가 전부 날짜 조건은 아니다, 날짜가 없어도 의미가 통하면 매치다" 지침 + 비날짜
+few-shot 추가 → **branch accuracy 65%→92%까지 상승** (`CLS-qwen2.5-7b-v4-nondate`, CORE 294건,
+run 25). 그러나 **confidence가 전부 0.9 이하로 눌려서 threshold 0.95에서 auto_send_coverage가
+정확히 0%**가 됨(아무 것도 통과 못 함). threshold를 0.90/0.85로 낮춰봤지만 그 순간 False
+Auto-Send가 37~40%로 폭발(run 26/27) — v9의 confidence는 0.85~0.9 구간에서 맞고 틀림을 전혀
+구분하지 못한다는 뜻.
+
+**최종 결론**: v9는 raw 분류 정확도(92%)는 최고지만 confidence를 안전판으로 쓸 수 없어서 (어떤
+threshold를 줘도 "다 막힘" 아니면 "다 뚫림") production 후보에서 제외. **`CLS-qwen2.5-7b-v2-strict`
+(v5 prompt + threshold 0.95)가 최종 확정 후보로 유지된다** — branch accuracy는 v9보다 낮지만
+(v1 65%/v2 86%), 1순위 지표인 False Auto-Send를 실제로 안전하게 지킨다.
+
+## Branch Generation (Track A) — 처음 테스트, 빠르게 실사용 가능 수준 도달
+
+Classification만 튜닝하다가 Generation(질문 → 분기 후보 생성)도 처음 테스트했다. 발견/수정한
+것:
+
+1. **`GenerationEvalRunnerService`가 OpenAI에 하드코딩되어 있었다** — Ollama provider 분기가 아예
+   없어서 로컬 모델을 못 썼다. `ClassificationEvalRunnerService.callModel`과 동일한 패턴으로
+   provider dispatch 추가.
+2. **`BATON Generation Eval v1`** 데이터셋 신설(39 시나리오) — Classification v1/v2 데이터셋의
+   질문(question/context)을 재사용, golden_branches는 Generation에 안 쓰므로 비움 (spec 3번:
+   Classification 정답을 Generation 검증에 쓰지 않는다의 반대 방향도 마찬가지로 지킴 — 재사용은
+   trigger question 텍스트뿐).
+3. 첫 실행(`GEN-qwen2.5-7b-v1`, 영어 seed prompt, SMOKE 8건): hard rule pass 62.5%. 실패 원인
+   전수 확인 결과 전부 "두 번째 분기부터 name 필드 누락" — 그리고 **Classification 때와 동일한
+   패턴으로, 한국어/일본어 질문인데 condition_text/decision_text가 중국어로 새는 현상**을 발견
+   (response_text는 정상적으로 입력 언어 유지 — 사용자에게 실제로 나가는 텍스트는 안전했지만,
+   관리자가 사전 승인 화면에서 보는 condition_text/decision_text가 중국어로 보이는 건 실사용
+   불가).
+4. **한국어 prompt v2**로 교체(영어 지시문이 원인으로 보임 — Classification 때와 같은 결론) +
+   "두 번째 이후 분기에도 name을 반드시 채워라" 명시 + 2-branch few-shot(둘 다 필드 완전히 채운
+   예시). 결과: **SMOKE 8/8 (100%), CORE 30/31 (96.8%)** hard rule 통과, 언어 이탈도 전수 확인
+   결과 완전히 사라짐 (`GEN-qwen2.5-7b-v2-korean`).
+
+**중요한 한계**: hard rule은 스키마 유효성(분기 개수/name/condition/decision 필드 존재)만
+확인한다. spec 4.3이 요구하는 진짜 품질 지표(Coverage/Separation/Granularity/Pre-decidability/
+Naturalness/Safety)는 **Human Review로만 판단해야 하며 이번 세션에서 LLM/자동 판정으로 대체하지
+않았다** — Human Review UI(`GenerationHumanReviewService`)는 이미 구현되어 있으니, 실제 프로덕션
+후보로 검토하려면 사람이 `/batons/models/generation`에서 직접 점수를 매겨야 한다. 눈으로 훑어본
+샘플(예: 인터뷰 일정 조율)은 내용상 합리적이었으나 이건 정식 Human Review가 아니다.
+
+## 현재 상태 요약 (두 트랙 모두)
+
+| Track | 최종 후보 Config | 검증 규모 | 핵심 지표 |
+| --- | --- | --- | --- |
+| Classification | `CLS-qwen2.5-7b-v2-strict` (id=13) | v1 299건 + v2 294건 | False Auto-Send 0~1.5%, Branch Accuracy 65~86% |
+| Generation | `GEN-qwen2.5-7b-v2-korean` (id=19) | 39건 (SMOKE+CORE) | Hard rule 96.8~100%, Human Review 미실시 |
+
+둘 다 여전히 DRAFT 상태 — Production 승격은 spec 15번 절차(Promote 확인 UI)를 통해 사람이
+명시적으로 결정할 것.
